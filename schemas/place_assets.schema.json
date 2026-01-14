@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "place_assets",
+  "description": "Asset layout consumed by blender_place_assets.py.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["root", "assets"],
+  "properties": {
+    "root": {
+      "type": "string",
+      "description": "Base directory for resolving relative GLB paths."
+    },
+    "assets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "location", "rotation", "scale"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "GLB path relative to root or absolute."
+          },
+          "location": {
+            "type": "array",
+            "items": {"type": "number"},
+            "minItems": 3,
+            "maxItems": 3,
+            "description": "Pivot world position [x, y, z]."
+          },
+          "rotation": {
+            "type": "array",
+            "items": {"type": "number"},
+            "minItems": 3,
+            "maxItems": 3,
+            "description": "Pivot rotation in degrees, XYZ Euler."
+          },
+          "scale": {
+            "type": "array",
+            "items": {"type": "number"},
+            "minItems": 3,
+            "maxItems": 3,
+            "description": "Pivot scale [x, y, z]."
+          }
+        }
+      }
+    }
+  }
+}

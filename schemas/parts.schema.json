@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "parts",
+  "description": "Minimal set of parts needed to build a URDF for the input object.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["object", "parts"],
+  "properties": {
+    "object": {
+      "type": "string",
+      "description": "Name of the object in the input image."
+    },
+    "parts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "description", "parent", "joint_type"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Short unique part name (used as image/GLB stem)."
+          },
+          "description": {
+            "type": "string",
+            "description": "What the part is and how it looks."
+          },
+          "parent": {
+            "type": ["string", "null"],
+            "description": "Name of the parent part, or null for the root/base part."
+          },
+          "joint_type": {
+            "type": "string",
+            "enum": ["fixed", "revolute", "prismatic", "continuous", "floating", "planar"],
+            "description": "URDF joint type connecting this part to its parent."
+          }
+        }
+      }
+    }
+  }
+}

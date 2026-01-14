@@ -1,0 +1,4 @@
+fal_client
+requests
+jsonschema
+pyyaml
