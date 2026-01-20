@@ -3,7 +3,7 @@
   "agent": {
     "analyze": {
       "description": "Reads the source image and writes the minimal URDF parts list to parts.json.",
-      "mode": "subagent",
+      "mode": "primary",
       "temperature": 0.2,
       "prompt": "{file:./.opencode/agents/analyze.md}",
       "permission": {
@@ -19,7 +19,7 @@
     },
     "imagegen": {
       "description": "Generates one white-background image per prompt in prompts.json into component_images/.",
-      "mode": "subagent",
+      "mode": "primary",
       "temperature": 0.2,
       "prompt": "{file:./.opencode/agents/imagegen.md}",
       "permission": {
@@ -35,7 +35,7 @@
     },
     "placement": {
       "description": "Generates a place_assets.json layout for component GLBs from the source image and the previous critique.",
-      "mode": "subagent",
+      "mode": "primary",
       "temperature": 0.2,
       "prompt": "{file:./.opencode/agents/placement.md}",
       "permission": {
@@ -51,7 +51,7 @@
     },
     "critic": {
       "description": "Plans render views and critiques the rendered assembly against the source image, returning a score and structured feedback.",
-      "mode": "subagent",
+      "mode": "primary",
       "temperature": 0.2,
       "prompt": "{file:./.opencode/agents/critic.md}",
       "permission": {

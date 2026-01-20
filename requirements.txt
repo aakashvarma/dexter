@@ -1,4 +1,5 @@
 fal_client
+openai
 requests
 jsonschema
 pyyaml

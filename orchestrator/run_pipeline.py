@@ -3,7 +3,7 @@
 Once (skipped if outputs already exist):
   analyze subagent   -> parts.json  -> [human gate]
   build_component_prompts.py        -> prompts.json
-  imagegen subagent  -> component_images/
+  openai_imagegen.py -> component_images/
   fal_image_to_3d.py -> component_glbs/
 
 Loop (iterations/NNN/):
@@ -83,7 +83,8 @@ def run_agent(agent: str, message: str, files: list[Path]) -> None:
     cmd = ["opencode", "run", "--agent", agent, "--format", "json"]
     for f in files:
         cmd += ["-f", str(f)]
-    cmd.append(message)
+    # -- stops yargs option parsing so the message is not consumed by -f [array]
+    cmd += ["--", message]
     run_command(cmd)
 
 
@@ -143,7 +144,7 @@ def step_prompts(config: dict, run_dir: Path, parts_path: Path) -> Path:
     return prompts_path
 
 
-def step_images(run_dir: Path, source: Path, prompts_path: Path) -> Path:
+def step_images(config: dict, run_dir: Path, prompts_path: Path) -> Path:
     images_dir = run_dir / "component_images"
     images_dir.mkdir(parents=True, exist_ok=True)
     prompts = json.loads(prompts_path.read_text(encoding="utf-8"))["prompts"]
@@ -152,17 +153,20 @@ def step_images(run_dir: Path, source: Path, prompts_path: Path) -> Path:
         print(f"component images exist, skipping: {images_dir}")
         return images_dir
 
-    run_agent(
-        "imagegen",
-        f"Read the prompts list at: {prompts_path}\n"
-        f"The source image is attached as the reference.\n"
-        f"Save each image to {images_dir}/<output_filename>. Skip entries that already exist.",
-        [source],
-    )
+    imggen_cfg = config["image_generation"]
+    imagegen_config = run_dir / "openai_imagegen.json"
+    write_json(imagegen_config, {
+        "prompts_path": str(prompts_path),
+        "output_dir": str(images_dir),
+        "model": imggen_cfg["model"],
+        "size": imggen_cfg["size"],
+        "quality": imggen_cfg["quality"],
+    })
+    run_script("openai_imagegen.py", imagegen_config)
 
     missing = [p["output_filename"] for p in prompts if not (images_dir / p["output_filename"]).exists()]
     if missing:
-        raise RuntimeError(f"imagegen did not produce: {', '.join(missing)}")
+        raise RuntimeError(f"openai_imagegen did not produce: {', '.join(missing)}")
     return images_dir
 
 
@@ -288,7 +292,7 @@ def main() -> None:
     parts_path = step_analyze(config, run_dir, source)
     human_gate(parts_path, args.skip_human_gate)
     prompts_path = step_prompts(config, run_dir, parts_path)
-    images_dir = step_images(run_dir, source, prompts_path)
+    images_dir = step_images(config, run_dir, prompts_path)
     step_3d(config, run_dir, images_dir)
 
     loop = config["loop"]
