@@ -1,5 +1,5 @@
 # Articulated asset pipeline configuration.
-# Read by orchestrator/run_pipeline.py. Paths are relative to the repo root.
+# Read by the orchestrator agent. Paths are relative to the repo root.
 # Models are not configured here: OpenCode subagents use your logged-in
 # OpenCode model (Codex OAuth).
 

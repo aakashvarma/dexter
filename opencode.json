@@ -1,9 +1,32 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
+    "orchestrator": {
+      "description": "Drives the full articulated-asset pipeline: runs deterministic scripts, invokes the analyze/imagegen/placement/critic subagents, and owns ordering, retries, and the stop condition.",
+      "mode": "primary",
+      "temperature": 0.2,
+      "prompt": "{file:./.opencode/agents/orchestrator.md}",
+      "permission": {
+        "edit": {"*": "deny", ".intermediate/**": "allow"},
+        "bash": {
+          "*": "deny",
+          "python *": "allow",
+          "python3 *": "allow",
+          "blender *": "allow",
+          "cp *": "allow",
+          "mkdir *": "allow"
+        },
+        "read": "allow",
+        "glob": "allow",
+        "list": "allow",
+        "webfetch": "deny",
+        "websearch": "deny",
+        "task": "allow"
+      }
+    },
     "analyze": {
       "description": "Reads the source image and writes the minimal URDF parts list to parts.json.",
-      "mode": "primary",
+      "mode": "subagent",
       "temperature": 0.2,
       "prompt": "{file:./.opencode/agents/analyze.md}",
       "permission": {
@@ -19,7 +42,7 @@
     },
     "imagegen": {
       "description": "Generates one white-background image per prompt in prompts.json into component_images/.",
-      "mode": "primary",
+      "mode": "subagent",
       "temperature": 0.2,
       "prompt": "{file:./.opencode/agents/imagegen.md}",
       "permission": {
@@ -35,7 +58,7 @@
     },
     "placement": {
       "description": "Generates a place_assets.json layout for component GLBs from the source image and the previous critique.",
-      "mode": "primary",
+      "mode": "subagent",
       "temperature": 0.2,
       "prompt": "{file:./.opencode/agents/placement.md}",
       "permission": {
@@ -50,8 +73,8 @@
       }
     },
     "critic": {
-      "description": "Plans render views and critiques the rendered assembly against the source image, returning a score and structured feedback.",
-      "mode": "primary",
+      "description": "Critiques the rendered assembly against the source image, returning a score and structured feedback.",
+      "mode": "subagent",
       "temperature": 0.2,
       "prompt": "{file:./.opencode/agents/critic.md}",
       "permission": {
