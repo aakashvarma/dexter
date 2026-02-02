@@ -36,6 +36,10 @@
             "type": "string",
             "description": "Part name the issue applies to."
           },
+          "locked": {
+            "type": "boolean",
+            "description": "True if this component is already correct and placement must not change it."
+          },
           "problem": {
             "type": "string",
             "description": "What is wrong with this component's placement."

@@ -15,6 +15,7 @@ loop:
   max_loops: 5                     # hard cap on iterations
   score_threshold: 85              # stop once critic score reaches this
   max_validation_retries: 2        # re-invoke a subagent this many times on schema failure
+  no_improvement_patience: 2       # stop if the best score does not improve for this many iterations
 
 image_generation:
   background_instruction: "Isolate only this part, centered on a plain white background, with no other parts visible."

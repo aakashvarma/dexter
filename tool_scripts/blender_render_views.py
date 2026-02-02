@@ -1,42 +1,37 @@
-"""blender_render_views.py — Render PNG views from a Blender scene.
+"""blender_render_views.py — Render PNG views, auto-framed to the assembly.
 
-What it does
-------------
-Runs inside Blender (``bpy``). Opens a ``.blend`` file, applies render
-settings from JSON, then for each camera entry:
-
-1. Create a camera at ``location`` facing ``look_at``
-2. Create a sun at the same pose (light from the view direction)
-3. Render one image to ``output_dir`` / ``output``
-4. Delete the temporary camera and light
+Runs inside Blender (``bpy``). Opens a ``.blend``, computes the scene bounding
+box, then for each camera entry places a camera along ``direction`` looking at
+the box center, at a distance that fits the whole assembly in frame. A white
+world background and a co-located light keep renders bright and comparable to a
+plain-background source photo.
 
 Run::
 
     blender --background --python blender_render_views.py -- \\
-        --blend ../.intermediate/dishwasher/001/assembled.blend \\
-        --cameras ../.intermediate/dishwasher/001/render_views.json \\
-        --output-dir ../.intermediate/dishwasher/001/renders/
+        --blend ../.intermediate/dishwasher/001/iterations/001/assembled.blend \\
+        --cameras ../.intermediate/dishwasher/001/iterations/001/render_views.json \\
+        --output-dir ../.intermediate/dishwasher/001/iterations/001/renders/
 
-JSON schema (every key required)::
+JSON schema (per camera: name, direction, output, light_energy, light_type;
+optional margin)::
 
     {
-      "resolution": [1920, 1080],       # render size [width, height] in pixels
-      "samples": 64,                    # Cycles sample count
-      "engine": "CYCLES",               # Blender render engine name
-      "file_format": "PNG",             # output image format
+      "resolution": [1920, 1080],
+      "samples": 64,
+      "engine": "CYCLES",
+      "file_format": "PNG",
       "cameras": [
         {
-          "location": [0.0, -12.0, 4.5],  # camera world position [x, y, z]
-          "look_at": [0.0, -1.0, 1.8],    # world point the camera faces
-          "output": "front.png",          # filename under --output-dir
-          "light_energy": 3.0,            # sun strength for this shot
-          "light_type": "SUN"             # Blender light type (co-located with camera)
+          "name": "front",
+          "direction": [0.0, -1.0, 0.2],  # view direction from the assembly center
+          "margin": 1.3,                  # >1 leaves padding around the assembly
+          "output": "front.png",
+          "light_energy": 5.0,
+          "light_type": "SUN"
         }
       ]
     }
-
-Logic: Blender cameras and sun lights point along local ``-Z``. Rotation aims
-``-Z`` from ``location`` toward ``look_at``.
 """
 
 from __future__ import annotations
@@ -49,13 +44,10 @@ from pathlib import Path
 import bpy  # type: ignore[import-not-found]
 from mathutils import Vector  # type: ignore[import-not-found]
 
+DEFAULT_MARGIN = 1.3
+
 
 def parse_args() -> argparse.Namespace:
-    """Parse arguments passed after Blender's ``--`` separator.
-
-    Returns:
-        Parsed arguments with ``blend``, ``cameras``, and ``output_dir`` paths.
-    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--blend", required=True)
     parser.add_argument("--cameras", required=True)
@@ -65,41 +57,44 @@ def parse_args() -> argparse.Namespace:
 
 
 def load_config(path: str) -> dict:
-    """Load the camera and render settings JSON from disk.
-
-    Args:
-        path: Path to the cameras config file.
-
-    Returns:
-        Parsed JSON as a dictionary.
-    """
     return json.loads(Path(path).expanduser().resolve().read_text(encoding="utf-8"))
 
 
+def scene_bounds() -> tuple:
+    """Return ``(center, radius)`` of the world bounding box of all meshes."""
+    corners = [
+        obj.matrix_world @ Vector(corner)
+        for obj in bpy.context.scene.objects
+        if obj.type == "MESH"
+        for corner in obj.bound_box
+    ]
+    lo = Vector((min(c[i] for c in corners) for i in range(3)))
+    hi = Vector((max(c[i] for c in corners) for i in range(3)))
+    center = (lo + hi) / 2
+    return center, (hi - lo).length / 2
+
+
+def set_white_background() -> None:
+    """Give the scene a bright white world so renders match a plain source."""
+    world = bpy.context.scene.world or bpy.data.worlds.new("World")
+    bpy.context.scene.world = world
+    world.use_nodes = True
+    bg = world.node_tree.nodes["Background"]
+    bg.inputs[0].default_value = (1.0, 1.0, 1.0, 1.0)
+    bg.inputs[1].default_value = 1.0
+
+
 def aim_rotation(location: Vector, look_at: Vector):
-    """Compute Euler rotation pointing local ``-Z`` from ``location`` to ``look_at``.
-
-    Args:
-        location: Camera or light world position.
-        look_at: World point to face.
-
-    Returns:
-        Euler rotation for Blender camera/light objects.
-    """
+    """Euler rotation pointing local ``-Z`` from ``location`` toward ``look_at``."""
     return (look_at - location).to_track_quat("-Z", "Y").to_euler()
 
 
-def create_shot(entry: dict) -> tuple:
-    """Create a temporary camera and co-located light for one camera entry.
-
-    Args:
-        entry: One object from the ``cameras`` list in the config JSON.
-
-    Returns:
-        ``(camera_object, light_object)`` at the pose from ``location`` and ``look_at``.
-    """
-    loc = Vector(entry["location"])
-    rot = aim_rotation(loc, Vector(entry["look_at"]))
+def create_shot(entry: dict, center: Vector, radius: float) -> tuple:
+    """Create a camera and co-located light framing the assembly center."""
+    direction = Vector(entry["direction"]).normalized()
+    distance = radius * entry.get("margin", DEFAULT_MARGIN) / 0.4
+    loc = center + direction * distance
+    rot = aim_rotation(loc, center)
 
     cam = bpy.data.objects.new("Cam", bpy.data.cameras.new("Cam"))
     bpy.context.collection.objects.link(cam)
@@ -114,12 +109,6 @@ def create_shot(entry: dict) -> tuple:
 
 
 def delete_shot(cam, light) -> None:
-    """Remove temporary camera and light objects after a render.
-
-    Args:
-        cam: Camera object from :func:`create_shot`.
-        light: Light object from :func:`create_shot`.
-    """
     cam_data, light_data = cam.data, light.data
     bpy.data.objects.remove(cam, do_unlink=True)
     bpy.data.objects.remove(light, do_unlink=True)
@@ -128,7 +117,6 @@ def delete_shot(cam, light) -> None:
 
 
 def main() -> None:
-    """Open the blend, render one image per camera entry, and write PNGs."""
     args = parse_args()
     config = load_config(args.cameras)
     output_dir = Path(args.output_dir).expanduser().resolve()
@@ -141,9 +129,11 @@ def main() -> None:
     scene.cycles.samples = config["samples"]
     scene.render.resolution_x, scene.render.resolution_y = config["resolution"]
     scene.render.image_settings.file_format = config["file_format"]
+    set_white_background()
 
+    center, radius = scene_bounds()
     for entry in config["cameras"]:
-        cam, light = create_shot(entry)
+        cam, light = create_shot(entry, center, radius)
         scene.camera = cam
         out = output_dir / entry["output"]
         scene.render.filepath = str(out)
