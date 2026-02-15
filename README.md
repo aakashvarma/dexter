@@ -2,7 +2,7 @@
 
 Turn a single product image into an assembled, critiqued 3D asset. The
 **orchestrator** OpenCode agent (`.opencode/agents/orchestrator.md`) owns all
-control flow. Four OpenCode subagents do the reasoning; tool scripts do the
+control flow. Five OpenCode subagents do the reasoning; tool scripts do the
 deterministic work.
 
 ## Agentic loop
@@ -13,47 +13,53 @@ flowchart TD
     gate --> prompts["build_component_prompts.py\nparts.json → prompts.json"]
     prompts --> imagegen["imagegen subagent\nprompts → component_images/"]
     imagegen --> fal["fal_image_to_3d.py\nimages → component_glbs/"]
-    fal --> measure["blender_measure_glbs.py\n→ component_dims.json"]
+    fal --> export["blender_export_meshes.py\n→ component_meshes/"]
+    export --> simplify["blender_simplify_meshes.py\n→ component_meshes_simp/"]
+    simplify --> measure["blender_measure_glbs.py\n→ component_dims.json"]
 
-    measure --> place["placement subagent\n→ place_assets.json"]
+    measure --> place["placement subagent\n→ assembly.json"]
 
-    subgraph loop ["correction loop  ·  iterations/NNN/"]
-        place --> vplace{"place_assets\nvalid?"}
-        vplace -->|no, append errors| place
-        vplace -->|yes| assemble["blender_place_assets.py\n→ assembled.blend"]
-        assemble --> renderplan["orchestrator writes\nrender_views.json"]
-        renderplan --> vrender{"render_views\nvalid?"}
-        vrender -->|no, fix and retry| renderplan
-        vrender -->|yes| render["blender_render_views.py\n→ renders/"]
-        render --> critique["critic subagent\n→ critic.json  (score + issues)"]
-        critique --> vcrit{"critic\nvalid?"}
-        vcrit -->|no, append errors| critique
-        vcrit -->|yes| decide{"stop?\nscore ≥ threshold and N ≥ min_loops\nor N ≥ max_loops\nor no improvement for patience"}
-        decide -->|no — next iteration from best layout + critic.json| place
+    subgraph placeLoop ["placement loop  ·  iterations/NNN/"]
+        place --> vplace{"assembly\nvalid?"}
+        vplace -->|no| place
+        vplace -->|yes| assemble["blender_assemble.py\n→ assembled.blend"]
+        assemble --> renderplan["render_views.json"]
+        renderplan --> render["blender_render_views.py\n→ renders/"]
+        render --> critique["critic subagent\n→ critic.json"]
+        critique --> decide{"stop placement?\nscore / max / patience"}
+        decide -->|no| place
     end
 
-    decide -->|yes| done["report best iteration,\nscore, and stop reason"]
+    decide -->|yes best B| jprops["joint_props subagent\n→ joint_props.json"]
+    jprops --> urdf["build_urdf.py\n→ model.urdf"]
+    urdf --> jgate{"human reviews URDF\nview_urdf.py sliders"}
+    jgate -->|feedback| jprops
+    jgate -->|confirm| done["report best placement B,\nfinal model.urdf"]
 ```
 
 ## Key points
 
-- **Run once, then loop.** Analyze, prompts, images, GLBs, and dimension
-  measurement run once. Only placement → assemble → render → critique loops.
+- **Placement first, URDF last.** Analyze, prompts, images, GLBs, mesh
+  export/simplify, and measure run once; then placement → assemble → render →
+  critic until layout converges. **After that**, `joint_props` drafts axes/limits,
+  `build_urdf.py` writes `model.urdf`, and you review motion in PyBullet until
+  you confirm (feedback re-runs `joint_props` + URDF rebuild).
+- **One IR, two outputs.** `assembly.json` drives Blender renders; the same file
+  (best iteration) plus final `joint_props.json` drives `model.urdf`.
 - **Orchestrator decides everything.** Subagents write one artifact each and
   exit. No agent-to-agent communication.
 - **Resume from disk.** Before each step the orchestrator probes
   `.intermediate/<asset>/<run>/` and skips any step whose output already exists
   and validates, unless you ask to redo it.
-- **Human gate.** After `parts.json`, the orchestrator pauses for your review.
-  It does not continue until you confirm or edit the parts list.
+- **Human gates.** After `parts.json`, pause for parts review. After the first
+  `model.urdf`, pause again: use `python tool_scripts/view_urdf.py --urdf …/model.urdf`,
+  then confirm or send joint feedback until axes/limits are right.
 - **Feedback channel.** On iteration 2+, the placement agent receives the
-  previous best `place_assets.json` plus `critic.json` and applies only the
+  previous best `assembly.json` plus `critic.json` and applies only the
   critic's corrections (skipping `locked` components). If an iteration regresses,
   the next placement is based on the best-scoring layout so far.
-- **Schema gates.** `parts`, `place_assets`, `render_views`, and `critic` are
-  validated after every write. Invalid output re-invokes the agent with errors
-  appended (up to `max_validation_retries`). `render_views.json` is written by
-  the orchestrator, not a subagent.
+- **Schema gates.** `parts`, `assembly`, `critic`, and `joint_props` are validated
+  after every write. `render_views.json` is written by the orchestrator.
 - **Exit rule.** Stop when `score >= score_threshold` and `N >= min_loops`, when
   `N >= max_loops`, or when the score has not improved over the best for
   `no_improvement_patience` consecutive iterations.
@@ -64,11 +70,11 @@ flowchart TD
 
 ```
 .intermediate/<asset>/<NNN>/
-  source.png  parts.json  prompts.json  component_dims.json  *.json (step configs)
-  component_images/  component_glbs/        # generated once
+  source.png  parts.json  joint_props.json  model.urdf  prompts.json  component_dims.json
+  component_images/  component_glbs/  component_meshes_simp/
+  joint_feedback.log  joint_props.confirmed  # after human joint review
   iterations/NNN/
-    place_assets.json  assembled.blend
-    render_views.json  renders/  critic.json
+    assembly.json  assembled.blend  renders/  critic.json
 ```
 
 ## Setup

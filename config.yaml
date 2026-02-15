@@ -36,3 +36,6 @@ render:                            # render defaults (critic plans the cameras)
   samples: 64
   engine: CYCLES
   file_format: PNG
+
+urdf:                              # mesh-simplify + URDF export settings
+  target_faces: 100000             # approx face count per simplified OBJ mesh

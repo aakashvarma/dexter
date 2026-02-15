@@ -38,7 +38,7 @@
           },
           "locked": {
             "type": "boolean",
-            "description": "True if this component is already correct and placement must not change it."
+            "description": "True only if placement, scale (dimensions vs source), and collision-free contact are all correct; placement must not change this component."
           },
           "problem": {
             "type": "string",
