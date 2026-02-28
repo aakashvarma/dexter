@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "physics_spec",
+  "description": "Isaac Sim (PhysX) physics configuration for an articulated asset. Produced by the physics_spec subagent from scene.json + parts.json + component_dims.json, consumed by apply_physics_spec.py to annotate robot.usda.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["asset_name", "articulation_root", "physics_scene", "rigid_bodies", "joints"],
+  "properties": {
+    "asset_name": {
+      "type": "string",
+      "description": "Object name, e.g. the value from parts.json.object."
+    },
+    "articulation_root": {
+      "type": "string",
+      "description": "USD prim path of the base link Xform (the structural root of the asset). Copy from scene.json.usd_prim_path."
+    },
+    "world_joint_path": {
+      "type": "string",
+      "description": "Optional prim path for a FixedJoint pinning the base to the world frame. When set, ArticulationRootAPI is applied here (fixed-base articulation). Omit for a free-floating articulation."
+    },
+    "physics_scene": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gravity_direction", "gravity_magnitude"],
+      "properties": {
+        "gravity_direction": {
+          "type": "array",
+          "items": {"type": "number"},
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "Gravity direction unit vector, normally [0, 0, -1] (Z-up)."
+        },
+        "gravity_magnitude": {
+          "type": "number",
+          "description": "Gravity magnitude in m/s^2, normally 9.81."
+        }
+      }
+    },
+    "rigid_bodies": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["prim_path", "mass_kg", "collision_approximation"],
+        "properties": {
+          "prim_path": {
+            "type": "string",
+            "description": "USD prim path of the link Xform. Copy from scene.json.usd_prim_path."
+          },
+          "mass_kg": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Body mass in kilograms, estimated from object category and size."
+          },
+          "center_of_mass": {
+            "type": "array",
+            "items": {"type": "number"},
+            "minItems": 3,
+            "maxItems": 3,
+            "description": "Optional center of mass [x, y, z] in the body's local frame."
+          },
+          "static_friction": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Static friction coefficient (default 0.5)."
+          },
+          "dynamic_friction": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Dynamic friction coefficient (default 0.4)."
+          },
+          "restitution": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Bounciness, 0 (no bounce) to 1 (elastic). Default 0.0."
+          },
+          "collision_approximation": {
+            "type": "string",
+            "enum": ["convexHull", "convexDecomposition", "none", "boundingCube", "boundingSphere", "meshSimplification"],
+            "description": "PhysX collision shape: convexHull (fast, convex parts), convexDecomposition (concave parts), none (exact triangle mesh, expensive)."
+          },
+          "is_kinematic": {
+            "type": "boolean",
+            "description": "True makes the body kinematic (immovable, not driven by forces). Leave false for links inside a fixed-base articulation; the world FixedJoint provides the fixed base."
+          }
+        }
+      }
+    },
+    "joints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["joint_name", "joint_type", "prim_path", "body0", "body1"],
+        "properties": {
+          "joint_name": {
+            "type": "string",
+            "description": "Human-readable joint name (e.g. front_door_hinge)."
+          },
+          "joint_type": {
+            "type": "string",
+            "enum": ["revolute", "prismatic", "fixed"],
+            "description": "USD physics joint type."
+          },
+          "prim_path": {
+            "type": "string",
+            "description": "USD prim path where the joint prim is created (e.g. /World/Robot/front_door_hinge)."
+          },
+          "body0": {
+            "type": "string",
+            "description": "Parent link prim path."
+          },
+          "body1": {
+            "type": "string",
+            "description": "Child link prim path (the part that moves)."
+          },
+          "axis": {
+            "type": "string",
+            "enum": ["X", "Y", "Z"],
+            "description": "Joint axis in the joint frame. Required for revolute/prismatic."
+          },
+          "lower_limit_deg": {
+            "type": "number",
+            "description": "Revolute lower limit in degrees."
+          },
+          "upper_limit_deg": {
+            "type": "number",
+            "description": "Revolute upper limit in degrees."
+          },
+          "lower_limit_m": {
+            "type": "number",
+            "description": "Prismatic lower limit in meters."
+          },
+          "upper_limit_m": {
+            "type": "number",
+            "description": "Prismatic upper limit in meters."
+          },
+          "drive_stiffness": {
+            "type": "number",
+            "minimum": 0,
+            "description": "PD drive stiffness. 0 with positive damping = velocity drive; positive = position drive."
+          },
+          "drive_damping": {
+            "type": "number",
+            "minimum": 0,
+            "description": "PD drive damping."
+          },
+          "drive_max_force": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Maximum drive force/torque."
+          }
+        }
+      }
+    },
+    "collision_groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "prim_path", "members"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Collision group name."
+          },
+          "prim_path": {
+            "type": "string",
+            "description": "USD prim path for the CollisionGroup prim (e.g. /World/CollisionGroups/dishwasher_internal)."
+          },
+          "members": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Prim paths whose colliders belong to this group."
+          },
+          "filter_self_collision": {
+            "type": "boolean",
+            "description": "When true, members do not collide with each other (group filters against itself)."
+          }
+        }
+      }
+    }
+  }
+}

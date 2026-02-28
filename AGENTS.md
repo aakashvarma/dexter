@@ -1,37 +1,35 @@
 # AGENTS.md
 
-## Source Of Truth
+## Source of truth
 
 - The runnable entrypoint is the OpenCode `orchestrator` agent (`opencode.json` -> `.opencode/agents/orchestrator.md`); there is no standalone Python pipeline driver.
-- Trust executable/config sources over prose: `opencode.json`, `.opencode/agents/*.md`, `config.yaml`, `tool_scripts/`, and `schemas/`.
-- Generated runs are under `.intermediate/<asset>/<NNN>/` and are gitignored; always inspect disk state there before resuming or deciding to redo work.
+- Trust executable/config files over prose: `opencode.json`, `.opencode/agents/*.md`, `config.yaml`, `tool_scripts/`, and `schemas/`.
+- Pipeline output lives in gitignored `.intermediate/<asset>/<NNN>/`; always list/read that run dir before resuming, and skip valid existing artifacts unless the user asks to redo them.
 
-## Running The Pipeline
+## Setup and commands
 
-- Setup: `pip install -r requirements.txt`; full runs also need authenticated `opencode`, `FAL_KEY` for fal.ai, and `blender` on `PATH` (or change `paths.blender_binary` in `config.yaml`).
-- Start through OpenCode, e.g. `opencode run --agent orchestrator -- "build the dishwasher from input_images/dishwasher.png"`.
-- Orchestrator behavior is resume-first: skip valid existing artifacts unless the user explicitly asks to redo them.
-- Human gate is mandatory: pause after `parts.json` and wait for confirmation before continuing.
+- Setup: `pip install -r requirements.txt`; full pipeline runs also need authenticated `opencode`, `OPENAI_API_KEY` for component PNGs, `FAL_KEY` for fal.ai GLBs, and `blender` on `PATH` (or change `paths.blender_binary` in `config.yaml`).
+- Start a run through OpenCode, e.g. `opencode run --agent orchestrator -- "build the dishwasher from input_images/dishwasher.png"`; to resume, point the prompt at `.intermediate/<asset>/<NNN>/`.
+- There is no checked-in test/lint/typecheck/CI/pre-commit runner or Python package manifest beyond `requirements.txt`; focused verification is JSON-schema validation: `python tool_scripts/validate_json.py --schema schemas/<name>.schema.json --data <path>`.
+- Blender scripts require args after `--`, e.g. `blender --background --python tool_scripts/blender_assemble.py -- --layout <assembly.json> --output <assembled.blend>`.
+- `apply_physics_spec.py` runs as plain Python, not inside Blender; it needs `pxr` from `usd-core` in `requirements.txt`.
 
-## Pipeline Order
+## Pipeline order and gates
 
-- One-time placement inputs: `analyze` -> `parts.json` -> human parts gate -> `build_component_prompts.py` -> `prompts.json` -> `imagegen` -> `component_images/` -> `fal_image_to_3d.py` -> `component_glbs/` -> Blender export/simplify -> `component_meshes/` and `component_meshes_simp/` -> Blender measure -> `component_dims.json`.
-- Placement loop per `iterations/<NNN>/`: `placement` -> `assembly.json` -> `blender_assemble.py` -> `assembled.blend` -> orchestrator-written `render_views.json` -> `blender_render_views.py` -> `renders/` -> `critic` -> `critic.json`.
-- Pipeline ends when the placement/critic loop converges; the final deliverable is `iterations/<B>/assembled.blend` for the best iteration `B`.
-- Loop controls (`min_loops`, `max_loops`, `score_threshold`, `max_validation_retries`, `no_improvement_patience`), fal settings, and render defaults are in `config.yaml`.
+- One-time placement inputs: `analyze` -> `parts.json` -> **human parts gate** -> `build_component_prompts.py` -> `prompts.json` -> `imagegen` -> `component_images/` -> `fal_image_to_3d.py` -> `component_glbs/` -> Blender export/simplify -> `component_meshes/` + `component_meshes_simp/` -> `component_dims.json`. Each part needs a specific `name` matching its factual `description`; descriptions are copied into image prompts.
+- Placement loop under `iterations/<NNN>/`: `placement` -> `assembly.json` -> `blender_assemble.py` -> `assembled.blend` -> orchestrator-written `render_views.json` -> `blender_render_views.py` -> `renders/` -> `critic` -> `critic.json`.
+- Stop the loop using `config.yaml` `loop.*`; after picking best iteration `B`, pause at the **human placement gate** and write `placement.confirmed` only after approval.
+- Physics export only starts when `placement.confirmed` exists: `blender_extract_scene.py` -> `scene.json` -> `physics_spec` -> `physics_spec.json` -> `blender_export_usd.py` -> `robot.usda` (+ `robot_prim_map.json`) -> `apply_physics_spec.py` -> `robot_physics.usda`.
+- Final deliverable is `<run_dir>/robot_physics.usda`; source geometry is `iterations/<B>/assembled.blend`.
 
-## Verification And Commands
+## Agent/schema gotchas
 
-- There is no checked-in test runner, linter, typecheck, CI workflow, or pre-commit config.
-- Validate generated JSON with `python tool_scripts/validate_json.py --schema schemas/<name>.schema.json --data <path>` for `parts`, `assembly`, and `critic`.
-- Blender scripts require Blender plus arguments after `--`, e.g. `blender --background --python tool_scripts/blender_assemble.py -- --layout <assembly.json> --output <assembled.blend>`.
-
-## Schema And Agent Gotchas
-
-- Subagents write exactly one requested artifact; only the orchestrator owns ordering, retries, render views, and stop conditions.
-- `assembly.json` is the shared IR: `visual_mesh` should resolve to `component_glbs/<part>.glb`; `collision_mesh` to `component_meshes_simp/<part>.obj`; `root` should be the run directory.
-- Link transforms are parent-relative pivots; `origin.rpy_deg` is XYZ Euler degrees. `scale` affects Blender assembly only.
-- Placement iteration 1 sets root at origin, rotations `[0,0,0]`, collision-free spacing from `component_dims.json`, and plausible scales; iteration 2+ applies critic deltas. Critic `locked` only when position, size, and collisions are all acceptable.
+- OpenCode defines five subagents (`analyze`, `imagegen`, `placement`, `critic`, `physics_spec`); each writes exactly one requested artifact. Only the orchestrator owns ordering, retries, render views, stop conditions, and human gates.
+- Validate subagent JSON (`parts`, `assembly`, `critic`, `physics_spec`) and `render_views.json`; re-invoke the same subagent with validation errors up to `loop.max_validation_retries`.
+- `assembly.json` paths are run-root relative: `visual_mesh` -> `component_glbs/<part>.glb`, `collision_mesh` -> `component_meshes_simp/<part>.obj`; link transforms are parent-relative pivots and `origin.rpy_deg` is XYZ Euler degrees.
+- Placement iteration 1 uses root at origin, rotations `[0,0,0]`, measured dimensions, no collisions, and plausible scales; iteration 2+ applies critic deltas only, skipping `locked` links and using the best prior layout after regressions.
+- Critic `locked` means position, size, and collisions are all acceptable; feedback should be per-component via `suggested_delta`, `suggested_rotation_delta`, `suggested_scale_factor`, or `locked`.
 - Render views are four auto-framed cameras (`front`, `top`, `left`, `isometric`) using `direction`, `output`, `light_energy`, and `light_type`; do not add `location`/`look_at`.
-- Critic feedback should be per-component and actionable via `suggested_delta`, `suggested_rotation_delta`, `suggested_scale_factor`, or `locked`; the next placement may be based on the best prior layout after a regression.
-- `tool_scripts/openai_imagegen.py` is not the configured component-image path; use it only for an explicit OpenAI Images request with `OPENAI_API_KEY` set.
+- Component PNGs must be generated by the `imagegen` subagent running `tool_scripts/openai_imagegen.py`; the script uses OpenAI `images.edit()` and requires `reference_image_path: <run_dir>/source.png` for every part.
+- USD prim paths must stay consistent: `blender_extract_scene.py` and `blender_export_usd.py` share `usd_safe`; `physics_spec` must copy `scene.json` `usd_prim_path` values verbatim so they resolve in `robot.usda`/`robot_prim_map.json`.
+- Isaac Sim output is Z-up/meters. USD export keeps Blender Z-up (`convert_orientation=False`); `apply_physics_spec.py` stamps `upAxis=Z`, `metersPerUnit=1`, places `ArticulationRootAPI` on the world fixed joint for fixed-base assets, and uses `angular` drives for revolute joints and `linear` for prismatic joints.

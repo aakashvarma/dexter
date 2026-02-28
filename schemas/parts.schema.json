@@ -20,11 +20,11 @@
         "properties": {
           "name": {
             "type": "string",
-            "description": "Short unique part name (used as image/GLB stem)."
+            "description": "Short unique snake_case part name (used as image/GLB stem). Must be specific to the described component — not a vague label like body or main."
           },
           "description": {
             "type": "string",
-            "description": "What the part is and how it looks."
+            "description": "Factual, non-exaggerated description of the visible part: shape, color, material, and placement. No invented or internal details."
           },
           "parent": {
             "type": ["string", "null"],

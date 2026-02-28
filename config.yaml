@@ -27,7 +27,7 @@ fal:                               # templated into fal_image_to_3d.json
   endpoint: fal-ai/hunyuan-3d/v3.1/pro/image-to-3d
   generate_type: Normal
   enable_pbr: true
-  face_count: 1500000
+  face_count: 40000               # fal minimum; visual GLBs are simplified later for Isaac Sim collision
   download_timeout_seconds: 300
   image_extensions: [".png", ".jpg", ".jpeg", ".webp"]
 
@@ -38,4 +38,20 @@ render:                            # render defaults (critic plans the cameras)
   file_format: PNG
 
 urdf:                              # mesh-simplify + URDF export settings
-  target_faces: 100000             # approx face count per simplified OBJ mesh
+  target_faces: 2000               # collision mesh; matches physics convex_decomposition_max_polys
+
+physics:                           # Isaac Sim (PhysX) USD export defaults
+  root_prim_path: /World/Robot     # USD prim that all geometry nests under
+  gravity_direction: [0, 0, -1]    # Z-up world (matches Blender + Isaac Sim)
+  gravity_magnitude: 9.81          # m/s^2
+  collision:                       # poly-count thresholds the physics_spec agent uses
+    convex_hull_max_polys: 100     # <= this -> convexHull
+    convex_decomposition_max_polys: 2000  # <= this -> convexDecomposition; above -> none
+  material:                        # default physics material coefficients
+    static_friction: 0.6
+    dynamic_friction: 0.4
+    restitution: 0.0
+  drive:                           # default PD drive for articulated joints
+    stiffness: 0.0                 # 0 + damping = velocity drive; >0 = position drive
+    damping: 1000.0
+    max_force: 500.0
