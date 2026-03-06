@@ -33,7 +33,7 @@ the next free `NNN` (or reuse the one they name).
      "background_instruction": "<image_generation.background_instruction from config.yaml>"
    }
    ```
-   then run `python tool_scripts/build_component_prompts.py --config <run_dir>/build_component_prompts.json`.
+   then run `python3 tool_scripts/build_component_prompts.py --config <run_dir>/build_component_prompts.json`.
 4. images: write `<run_dir>/openai_imagegen.json` from the `image_generation` block
    in `config.yaml`:
    ```json
@@ -70,7 +70,7 @@ the next free `NNN` (or reuse the one they name).
      }
    }
    ```
-   then run `python tool_scripts/fal_image_to_3d.py --config <run_dir>/fal_image_to_3d.json`.
+   then run `python3 tool_scripts/fal_image_to_3d.py --config <run_dir>/fal_image_to_3d.json`.
    The script skips any image that already has a `.glb`, so re-running only fills
    in missing GLBs. If it fails (e.g. fal credits), report which GLBs are missing
    and stop; the user can rerun this step later.
@@ -83,17 +83,67 @@ the next free `NNN` (or reuse the one they name).
 8. measure: run
    `blender --background --python tool_scripts/blender_measure_glbs.py -- --glbs-dir <run_dir>/component_glbs --output <run_dir>/component_dims.json`.
    Skip if `component_dims.json` already exists.
+9. placement hints: **This step is mandatory before the first placement iteration.**
+
+   a. Look at the source image and estimate the object's real-world bounding box:
+      width (X), depth (Y), height (Z) in metres. Use domain knowledge (e.g.
+      French-door fridge ~0.90 × 0.70 × 1.78 m; dishwasher ~0.60 × 0.60 × 0.85 m;
+      washing machine ~0.60 × 0.60 × 0.85 m; microwave ~0.50 × 0.40 × 0.30 m;
+      oven ~0.60 × 0.60 × 0.90 m; laptop ~0.35 × 0.24 × 0.02 m closed).
+      Read `component_dims.json` and confirm the root GLB's raw size is plausible.
+
+   b. Run the scale-hint script (no heuristics — all geometry comes from `parts.json`):
+      ```
+      python3 tool_scripts/compute_placement_scales.py \
+          --parts  <run_dir>/parts.json \
+          --dims   <run_dir>/component_dims.json \
+          --output <run_dir>/placement_hints.json \
+          --root-world-dims W D H \
+          [--open-angle-deg 90] \
+          [--pullout-fraction 0.5] \
+          [--child-world-dims <part_name> W D H]
+      ```
+      The script reads `size_fraction`, `position_in_parent`, `hinge_side`, and
+      `slide_axis` **directly from `parts.json`** — there is no guessing. It
+      pre-computes correct child scales and open/closed origin positions for the
+      ENTIRE part tree (all depths, not just direct children of root). Read and
+      verify the printed summary.
+
+   c. Available flags:
+
+      | Flag | Default | Purpose |
+      |------|---------|---------|
+      | `--root-world-dims W D H` | *(required)* | Real-world size of root part in metres |
+      | `--open-angle-deg 90`     | 90° | Open angle for revolute joints; match angle visible in source image |
+      | `--pullout-fraction 0.50` | 50% | Pull-out depth for prismatic joints; match extension visible in source image |
+      | `--child-world-dims NAME W D H` | *(none)* | Override `size_fraction` for a specific part with exact world dims; may be repeated |
+
+      If the hints look wrong for a part, fix `size_fraction`, `position_in_parent`,
+      `hinge_side`, or `slide_axis` in `parts.json` and rerun — **do not patch the
+      hints file manually**.
+
+   Skip step 9 only if `placement_hints.json` already exists and `root_world_dims`
+   + `config_used` in it match your current estimates. If you change any flag or
+   edit `parts.json`, delete and regenerate the hints file.
 
 ## Placement/critic loop (per iteration in `iterations/NNN/`)
 
 Run iterations starting at 1. For iteration `n` (zero-padded dir, e.g. `001`):
 
-1. placement: invoke the `placement` subagent with the source image attached.
-   Output `iterations/<n>/assembly.json`; pass `root`, GLB/mesh paths,
-   `parts.json`, `component_dims.json`, and iteration `n`. On iteration 2+,
-   attach the base `assembly.json` and `critic.json`; apply only critic
-   corrections (skip `locked` links). After a regression, base placement on the
-   best-scoring layout so far, not the last iteration.
+1. placement: invoke the `placement` subagent (Task tool) with:
+   - The source image attached.
+   - The FULL CONTENTS of `placement_hints.json` included in the prompt (not just
+     the path — paste the JSON text so the agent has all pre-computed values in
+     context). Tell the agent: "Use the child_scale and open_pose values from
+     placement_hints.json as your starting point. Do not use [1,1,1] scales or
+     guess positions from scratch. Adjust estimated_world_dims if the source image
+     shows different proportions, then recompute child_scale."
+   - Paths: `root` = run_dir, GLB/mesh paths, `parts.json`, `component_dims.json`,
+     iteration `n`. On iteration 2+, also include the previous `assembly.json`
+     and `critic.json`; apply only critic corrections (skip `locked` links).
+     After a regression, base on the best-scoring layout so far.
+   - Output path: `<run_dir>/iterations/<n>/assembly.json`.
+
 2. assemble: run
    `blender --background --python tool_scripts/blender_assemble.py -- --layout iterations/<n>/assembly.json --output iterations/<n>/assembled.blend`.
 3. render views: write `iterations/<n>/render_views.json` (four cameras per
@@ -101,7 +151,8 @@ Run iterations starting at 1. For iteration `n` (zero-padded dir, e.g. `001`):
 4. render: run
    `blender --background --python tool_scripts/blender_render_views.py -- --blend iterations/<n>/assembled.blend --cameras iterations/<n>/render_views.json --output-dir iterations/<n>/renders/`.
 5. critique: invoke the `critic` subagent with the source image, all rendered
-   PNGs, and `component_dims.json`; write `iterations/<n>/critic.json`.
+   PNGs, `component_dims.json`, and the current `assembly.json` (so the agent can
+   compute world dimensions from scale values). Write `iterations/<n>/critic.json`.
 6. exit check: track the best iteration by `score`. Stop when
    `score >= loop.score_threshold and n >= loop.min_loops`, when
    `n >= loop.max_loops`, or when the score has not improved over the best for
@@ -145,7 +196,7 @@ below. Each step is resume-first: skip it if its output already exists and is va
    `blender --background --python tool_scripts/blender_export_usd.py -- --blend iterations/<B>/assembled.blend --output <run_dir>/robot.usda --root-prim-path <physics.root_prim_path>`.
    Skip if `robot.usda` exists.
 4. apply physics: run
-   `python tool_scripts/apply_physics_spec.py --usd <run_dir>/robot.usda --spec <run_dir>/physics_spec.json --output <run_dir>/robot_physics.usda`.
+   `python3 tool_scripts/apply_physics_spec.py --usd <run_dir>/robot.usda --spec <run_dir>/physics_spec.json --output <run_dir>/robot_physics.usda`.
    Skip if `robot_physics.usda` exists.
 
 Report the final deliverable `<run_dir>/robot_physics.usda` (the Isaac Sim-ready
@@ -154,10 +205,10 @@ asset) alongside the best `iterations/<B>/assembled.blend`.
 ## Validation and retries
 
 After any subagent writes JSON, validate:
-`python tool_scripts/validate_json.py --schema schemas/<name>.schema.json --data <path>`
-(`parts`, `assembly`, `critic`, `physics_spec`). Re-invoke the same subagent with
-errors appended, up to `loop.max_validation_retries` times. Validate
-`render_views.json` before rendering.
+`python3 tool_scripts/validate_json.py --schema schemas/<name>.schema.json --data <path>`
+(`parts`, `assembly`, `critic`, `physics_spec`, `placement_hints`). Re-invoke the
+same subagent with errors appended, up to `loop.max_validation_retries` times.
+Validate `render_views.json` before rendering.
 
 ## Resuming and bring-your-own-artifacts
 
@@ -172,6 +223,7 @@ loop finished but that file is missing, stop at the placement human gate.
   source.png
   parts.json
   component_dims.json
+  placement_hints.json  # from compute_placement_scales.py (step 9)
   placement.confirmed   # human-approved iteration id (e.g. 006)
   iterations/<n>/
     assembly.json  assembled.blend  renders/  critic.json
