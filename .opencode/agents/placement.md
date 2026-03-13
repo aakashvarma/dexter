@@ -28,7 +28,7 @@ Conform to `schemas/assembly.schema.json`. Set `root` to the run directory and
 `robot_name` to the object name from `parts.json`. Each link needs:
 
 - `name`, `parent`, `visual_mesh` (`component_glbs/<name>.glb`),
-  `collision_mesh` (`component_meshes_simp/<name>.obj`).
+  `collision_mesh` (`component_glbs/<name>.glb` — same GLB as visual).
 - `origin`: `{ "xyz": [x,y,z], "rpy_deg": [rx,ry,rz] }` — pivot pose in the
   **parent's local (unscaled) coordinate space**.
 - `scale`: `[x,y,z]`.

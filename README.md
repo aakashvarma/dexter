@@ -13,9 +13,7 @@ flowchart TD
     gate --> prompts["build_component_prompts.py\nparts.json → prompts.json"]
     prompts --> imagegen["imagegen subagent\nprompts → component_images/"]
     imagegen --> fal["fal_image_to_3d.py\nimages → component_glbs/"]
-    fal --> export["blender_export_meshes.py\n→ component_meshes/"]
-    export --> simplify["blender_simplify_meshes.py\n→ component_meshes_simp/"]
-    simplify --> measure["blender_measure_glbs.py\n→ component_dims.json"]
+    fal --> measure["blender_measure_glbs.py\n→ component_dims.json"]
 
     measure --> place["placement subagent\n→ assembly.json"]
 
@@ -41,8 +39,8 @@ flowchart TD
 
 ## Key points
 
-- **Placement first, physics export last.** Analyze, prompts, images, GLBs, mesh
-  export/simplify, and measure run once; then placement → assemble → render →
+- **Placement first, physics export last.** Analyze, prompts, images, GLBs, and
+  measure run once; then placement → assemble → render →
   critic until layout converges. **After that**, scene extraction →
   `physics_spec` → USD export → `apply_physics_spec.py` produces
   `robot_physics.usda` for Isaac Sim.
@@ -75,7 +73,7 @@ flowchart TD
 ```
 .intermediate/<asset>/<NNN>/
   source.png  parts.json  prompts.json  component_dims.json
-  component_images/  component_glbs/  component_meshes_simp/
+  component_images/  component_glbs/
   placement.confirmed  scene.json  physics_spec.json  robot.usda  robot_prim_map.json  robot_physics.usda
   iterations/NNN/
     assembly.json  assembled.blend  renders/  critic.json

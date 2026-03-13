@@ -36,7 +36,7 @@
           },
           "collision_mesh": {
             "type": "string",
-            "description": "Simplified OBJ path (relative to root or absolute) used for URDF visual/collision geometry."
+            "description": "Collision mesh path (relative to root or absolute). Use the same GLB as visual_mesh: component_glbs/<name>.glb."
           },
           "origin": {
             "type": "object",

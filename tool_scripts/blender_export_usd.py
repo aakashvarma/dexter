@@ -70,6 +70,22 @@ def supported_kwargs(desired: dict) -> dict:
     return {k: v for k, v in desired.items() if k in valid}
 
 
+def pack_images() -> None:
+    """Ensure every image in the scene is packed into the blend file.
+
+    GLBs imported via ``bpy.ops.import_scene.gltf`` embed their textures as
+    packed images.  Any that are still referencing an external file path would
+    silently be skipped by the USD exporter, so we pack them all here so the
+    exporter can extract them into the ``textures/`` directory next to the USD.
+    """
+    for img in bpy.data.images:
+        if img.source in {"FILE", "SEQUENCE"} and not img.packed_file:
+            try:
+                img.pack()
+            except Exception as exc:
+                print(f"[WARN] Could not pack image '{img.name}': {exc}")
+
+
 def main() -> None:
     args = parse_args()
     blend = Path(args.blend).expanduser().resolve()
@@ -78,12 +94,19 @@ def main() -> None:
 
     bpy.ops.wm.open_mainfile(filepath=str(blend))
 
+    # Pack loose textures so the USD exporter can extract them.
+    pack_images()
+
     kwargs = supported_kwargs(
         {
             "filepath": str(output),
             "export_materials": True,
             "export_uvmaps": True,
             "export_normals": True,
+            # export_textures: copy all images into a textures/ subdirectory
+            # next to the USD file so Isaac Sim can resolve them.
+            "export_textures": True,
+            "overwrite_textures": True,
             "root_prim_path": args.root_prim_path,
             "convert_orientation": False,
         }
