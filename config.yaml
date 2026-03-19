@@ -27,7 +27,7 @@ fal:                               # templated into fal_image_to_3d.json
   endpoint: fal-ai/hunyuan-3d/v3.1/pro/image-to-3d
   generate_type: Normal
   enable_pbr: true
-  face_count: 1500000
+  face_count: 40000               # fal minimum mesh density for component GLBs
   download_timeout_seconds: 300
   image_extensions: [".png", ".jpg", ".jpeg", ".webp"]
 
@@ -36,3 +36,6 @@ render:                            # render defaults (critic plans the cameras)
   samples: 64
   engine: CYCLES
   file_format: PNG
+
+usd:
+  root_prim_path: /World/Robot     # USD prim that all geometry nests under

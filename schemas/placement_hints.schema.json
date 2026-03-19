@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "placement_hints",
+  "description": "Pre-computed scale and placement hints produced by compute_placement_scales.py. Every value is derived from parts.json size_fraction/position_in_parent/hinge_side/slide_axis plus the root world dims. The placement agent should start from these values and only override when the source image clearly contradicts them.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["object", "root_name", "root_world_dims", "root_world_center", "root_scale", "parts"],
+  "properties": {
+
+    "object": {
+      "type": "string",
+      "description": "Object name from parts.json."
+    },
+
+    "root_name": {
+      "type": "string",
+      "description": "Name of the root part."
+    },
+
+    "root_world_dims": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 3,
+      "maxItems": 3,
+      "description": "[width_m, depth_m, height_m] real-world size of the root part, in metres."
+    },
+
+    "root_world_center": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 3,
+      "maxItems": 3,
+      "description": "World-space centre of the root part. Typically [0, 0, height/2] (root sits on world floor at origin)."
+    },
+
+    "root_scale": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 3,
+      "maxItems": 3,
+      "description": "root_scale[axis] = root_world_dims[axis] / raw_root_size[axis]. Use directly as the root link's scale in assembly.json."
+    },
+
+    "config_used": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Parameter values (open_angle_deg, pullout_fraction, overrides) that were active when this file was generated."
+    },
+
+    "parts": {
+      "type": "array",
+      "description": "Placement hints for every non-root part. Nested children are under each entry's 'children' key.",
+      "items": { "$ref": "#/$defs/part_hint" }
+    }
+  },
+
+  "$defs": {
+    "part_hint": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["name", "joint_type", "child_scale", "closed_pose"],
+      "properties": {
+
+        "name": { "type": "string" },
+
+        "joint_type": { "type": "string" },
+
+        "parent_effective_scale": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "The product of all ancestor scales along each axis. child_scale is applied on top of this."
+        },
+
+        "estimated_world_dims": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "[W, D, H] in metres. Derived from size_fraction × parent_world_dims. Verify against source image; recompute child_scale if you change this."
+        },
+
+        "raw_size": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "Raw GLB bounding-box size in Blender units (≈ metres) before any scale is applied."
+        },
+
+        "child_scale": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "child_scale[axis] = estimated_world_dims[axis] / (parent_effective_scale[axis] × raw_size[axis]). Use this directly as scale in assembly.json. Recompute if you change estimated_world_dims."
+        },
+
+        "closed_pose": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["world_center", "origin_xyz", "rpy_deg"],
+          "properties": {
+            "world_center": {
+              "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3,
+              "description": "World-space centre of this part in its closed/default pose."
+            },
+            "origin_xyz": {
+              "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3,
+              "description": "origin.xyz for assembly.json in PARENT LOCAL (unscaled) space."
+            },
+            "rpy_deg": {
+              "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3,
+              "description": "origin.rpy_deg for assembly.json. [0,0,0] for closed pose."
+            }
+          }
+        },
+
+        "open_pose": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Suggested open/extended pose. Only present for revolute and prismatic joints.",
+          "properties": {
+            "hinge_side":      { "type": "string" },
+            "open_angle_deg":  { "type": "number" },
+            "open_rpy_deg":    { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
+            "open_origin_xyz": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
+            "open_world_center": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
+            "slide_axis":      { "type": "string" },
+            "pullout_fraction": { "type": "number" },
+            "pull_distance_m": { "type": "number" },
+            "note":            { "type": "string" }
+          }
+        },
+
+        "children": {
+          "type": "array",
+          "description": "Hints for grandchildren (children of this part), same schema recursively.",
+          "items": { "$ref": "#/$defs/part_hint" }
+        }
+      }
+    }
+  }
+}

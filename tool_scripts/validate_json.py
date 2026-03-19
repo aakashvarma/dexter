@@ -5,13 +5,14 @@ What it does
 Loads a JSON Schema and a data file, validates the data, and reports the
 result. Prints ``OK`` and exits 0 when valid; prints each schema error and
 exits 1 when invalid. Used as the gate for ``parts.json``,
-``place_assets.json``, and ``render_views.json``.
+``assembly.json``, ``critic.json``, ``physics_spec.json``,
+and ``render_views.json``.
 
 Run::
 
     python validate_json.py \\
-        --schema ../schemas/place_assets.schema.json \\
-        --data ../.intermediate/dishwasher/001/iterations/001/place_assets.json
+        --schema ../schemas/assembly.schema.json \\
+        --data ../.intermediate/dishwasher/001/iterations/001/assembly.json
 
 No JSON config of its own; both inputs are passed as file paths.
 """
