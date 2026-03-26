@@ -1,0 +1,136 @@
+# Running a Pipeline
+
+## Start a new run
+
+```bash
+opencode run --agent orchestrator -- "build the dishwasher from input_images/dishwasher.png"
+```
+
+Or open the OpenCode TUI and chat with the `orchestrator` agent directly:
+
+```bash
+opencode
+# select orchestrator, then type your task
+```
+
+The orchestrator will:
+
+1. Copy the source image to `.intermediate/<asset>/<NNN>/source.png`
+2. Pick the next free run number (`001`, `002`, …)
+3. Execute each step, **skipping** any whose output already exists and validates on disk
+
+## What happens during a run
+
+### Phase 1 — One-time setup (~10–30 min)
+
+| Step | Who | Output | Human gate? |
+|------|-----|--------|-------------|
+| Analyze | `analyze` subagent | `parts.json` | **Yes — review parts** |
+| Build prompts | `build_component_prompts.py` | `prompts.json` | No |
+| Generate images | `imagegen` subagent | `component_images/*.png` | No |
+| Image-to-3D | `fal_image_to_3d.py` | `component_glbs/*.glb` | No |
+| Measure GLBs | `blender_measure_glbs.py` | `component_dims.json` | No |
+| Placement hints | `compute_placement_scales.py` | `placement_hints.json` | No |
+
+**Human gate (parts):** The orchestrator shows the parts list and waits for your confirmation or edits before continuing. Review names, descriptions, joint types, and geometry hints (`size_fraction`, `hinge_side`, `slide_axis`).
+
+### Phase 2 — Placement loop (~5–15 min per iteration)
+
+| Step | Who | Output |
+|------|-----|--------|
+| Placement | `placement` subagent | `iterations/NNN/assembly.json` |
+| Assemble | `blender_assemble.py` | `assembled.blend` |
+| Render plan | orchestrator | `render_views.json` |
+| Render | `blender_render_views.py` | `renders/*.png` |
+| Critique | `critic` subagent | `critic.json` |
+
+Repeats until loop exit conditions are met. The orchestrator tracks the best iteration by score.
+
+### Phase 3 — Human placement gate
+
+Shows best iteration renders, critic score, and `assembled.blend` path. You approve or request more iterations.
+
+Approval is recorded in `placement.confirmed` (single line: iteration id, e.g. `006`).
+
+### Phase 4 — USD export
+
+```bash
+# orchestrator runs this automatically after placement.confirmed exists
+blender --background --python tool_scripts/blender_export_usd.py -- \
+  --blend iterations/<B>/assembled.blend \
+  --output robot.usda \
+  --root-prim-path /World/Robot
+```
+
+**Final deliverable:** `<run_dir>/robot.usda` + `textures/` + `robot_prim_map.json`
+
+## Example commands
+
+```bash
+# New asset
+opencode run --agent orchestrator -- "build the refrigerator from input_images/refrigerator.png"
+
+# Resume interrupted run
+opencode run --agent orchestrator -- "resume .intermediate/dishwasher/001/"
+
+# Continue after parts gate
+opencode run --agent orchestrator -- "parts confirmed, continue .intermediate/dishwasher/001/"
+
+# Request more placement iterations
+opencode run --agent orchestrator -- "run 3 more placement iterations for .intermediate/dishwasher/001/"
+```
+
+## Monitoring progress
+
+```bash
+RUN=.intermediate/dishwasher/001
+
+# One-time artifacts
+ls $RUN/parts.json $RUN/component_glbs/ $RUN/placement_hints.json
+
+# Iterations
+ls $RUN/iterations/
+
+# Latest critic score
+cat $RUN/iterations/$(ls $RUN/iterations/ | sort | tail -1)/critic.json \
+  | python3 -c "import json,sys; d=json.load(sys.stdin); print(f'Iter {d[\"iteration\"]}: score={d[\"score\"]} — {d[\"summary\"]}')"
+
+# Placement gate status
+cat $RUN/placement.confirmed 2>/dev/null || echo "Not yet approved"
+
+# Final output
+ls $RUN/robot.usda 2>/dev/null || echo "Not yet exported"
+```
+
+## Validate artifacts manually
+
+```bash
+python3 tool_scripts/validate_json.py \
+  --schema schemas/assembly.schema.json \
+  --data .intermediate/dishwasher/001/iterations/006/assembly.json
+```
+
+## Run directory layout
+
+```
+.intermediate/<asset>/<NNN>/
+  source.png
+  parts.json
+  prompts.json
+  component_dims.json
+  placement_hints.json
+  placement.confirmed          # human-approved iteration id
+  component_images/            # per-part PNGs
+  component_glbs/              # per-part GLBs
+  iterations/<NNN>/
+    assembly.json
+    assembled.blend
+    render_views.json
+    renders/                   # front, top, left, isometric
+    critic.json
+  robot.usda                   # final deliverable
+  robot_prim_map.json
+  textures/
+```
+
+See the full [Dishwasher sample run](/sample-runs/dishwasher) for a walkthrough with images and video.

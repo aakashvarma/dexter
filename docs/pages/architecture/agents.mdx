@@ -1,0 +1,176 @@
+# Agents
+
+Dexter uses six OpenCode agents: one **orchestrator** (primary) and five **subagents**. Each subagent writes exactly one artifact and exits. Subagents never communicate with each other — the orchestrator passes context between them.
+
+Prompt files: `.opencode/agents/*.md` · Config: `opencode.json`
+
+## Agent hierarchy
+
+| Agent | Mode | Artifact | Prompt file |
+|-------|------|----------|-------------|
+| **orchestrator** | primary | `render_views.json`, config JSONs, `placement.confirmed` | `orchestrator.md` |
+| **analyze** | subagent | `parts.json` | `analyze.md` |
+| **imagegen** | subagent | `component_images/*.png` | `imagegen.md` |
+| **placement** | subagent | `assembly.json` | `placement.md` |
+| **critic** | subagent | `critic.json` | `critic.md` |
+| **physics_spec** | subagent | `physics_spec.json` | `physics_spec.md` |
+
+---
+
+## Orchestrator
+
+The only entrypoint. Owns all ordering, retries, stop conditions, human gates, and render view planning.
+
+**Responsibilities:**
+- Probe `.intermediate/<asset>/<NNN>/` before every step
+- Skip steps whose output exists and validates
+- Invoke subagents via OpenCode Task tool
+- Run tool scripts via bash with orchestrator-written config JSONs
+- Write four-camera `render_views.json` each iteration
+- Enforce human gates (parts review, placement approval)
+- Track best critic score and apply loop exit rules
+
+**Config JSONs it writes** (templated from `config.yaml`):
+
+| File | Script |
+|------|--------|
+| `build_component_prompts.json` | `build_component_prompts.py` |
+| `openai_imagegen.json` | `openai_imagegen.py` |
+| `fal_image_to_3d.json` | `fal_image_to_3d.py` |
+
+**Permissions:** edit `.intermediate/**` only; bash: `python*`, `blender*`, `cp`, `mkdir`; task: allow.
+
+---
+
+## Analyze
+
+Decomposes the source image into the minimal articulated parts list.
+
+**Input:** Source image (attached)
+**Output:** `parts.json` — Parts IR
+
+Per part, outputs:
+- `name` — unique snake_case filename stem
+- `description` — one sentence for image generation
+- `parent` — parent part name or `null` for root
+- `joint_type` — `fixed`, `revolute`, `prismatic`, etc.
+- `size_fraction` — `[w, d, h]` as fraction of parent's world dims
+- `position_in_parent` — `left`, `bottom-center`, `upper-left`, etc.
+- `hinge_side` — for revolute: `left`, `right`, `top`, `bottom`
+- `slide_axis` — for prismatic: `-y`, `+z`, etc.
+
+**Example part:**
+
+```json
+{
+  "name": "front_door",
+  "description": "The front drop-down door panel with handle on the upper edge.",
+  "parent": "cabinet_body",
+  "joint_type": "revolute",
+  "size_fraction": [1.00, 0.06, 0.60],
+  "position_in_parent": "center",
+  "hinge_side": "bottom"
+}
+```
+
+Validated against `schemas/parts.schema.json`.
+
+---
+
+## Imagegen
+
+Generates one isolated component PNG per part. **Only** runs `openai_imagegen.py` — no direct API calls.
+
+**Input:** `openai_imagegen.json` (orchestrator-written)
+**Output:** `component_images/<part>.png`
+
+Uses OpenAI `images.edit()` with `source.png` always attached as visual reference. Skips prompts whose output PNG already exists.
+
+Requires `OPENAI_API_KEY` in environment.
+
+---
+
+## Placement
+
+Writes one `assembly.json` per iteration — the Layout IR.
+
+**Inputs:**
+- Source image
+- `parts.json`, `component_dims.json`
+- `placement_hints.json` (inline in prompt — full JSON text, not just path)
+- Iteration 2+: previous `assembly.json` + `critic.json`
+
+**Output per link:**
+
+```json
+{
+  "name": "front_door",
+  "parent": "cabinet_body",
+  "visual_mesh": "component_glbs/front_door.glb",
+  "collision_mesh": "component_glbs/front_door.glb",
+  "origin": {"xyz": [0.0, -0.42, 0.15], "rpy_deg": [45.0, 0.0, 0.0]},
+  "scale": [2.1, 3.4, 1.8]
+}
+```
+
+**Key rule — scale inheritance:**
+
+```
+child_scale[axis] = target_world_size[axis] / (parent_scale[axis] × raw_size[axis])
+```
+
+Never use `child_scale = [1,1,1]` when parent has non-unity scale.
+
+**Iteration 2+:** Apply critic corrections only. Skip `locked` components. Revert to best layout after regressions.
+
+---
+
+## Critic
+
+Compares rendered assembly to source image. Never edits `assembly.json`.
+
+**Inputs:** Source image, four renders, `component_dims.json`, `assembly.json`
+**Output:** `critic.json` — Critique IR
+
+Scores 0–100. Per-component issues with at most one decisive correction:
+- `suggested_delta [dx,dy,dz]` — parent-local position fix
+- `suggested_scale_factor` — multiplicative scale change
+- `suggested_rotation_delta [drx,dry,drz]` — degrees to add to rpy
+- `locked: true` — size, position, and collisions all correct
+
+| Score | Meaning |
+|-------|---------|
+| 90–100 | All correct; cosmetic issues only |
+| 75–89 | Recognisable; 1–2 noticeable errors |
+| 60–74 | Multiple errors; roughly right |
+| below 60 | Structural failure |
+
+---
+
+## Physics Spec
+
+Assigns joint axes, limits, and PhysX properties for Isaac Sim. Configured in `opencode.json`; planned for post-placement physics export workflow.
+
+**Inputs:** `scene.json`, `parts.json`, `component_dims.json`
+**Output:** `physics_spec.json` — Joint IR
+
+---
+
+## Permissions model
+
+All agents can only **write** inside `.intermediate/**`. The repo source tree is read-only. Subagents have tightly scoped bash permissions:
+
+| Agent | Bash allowed |
+|-------|-------------|
+| orchestrator | `python*`, `blender*`, `cp`, `mkdir` |
+| analyze | `validate_json.py` only |
+| imagegen | `openai_imagegen.py` only |
+| placement | `validate_json.py` only |
+| critic | `validate_json.py` only |
+| physics_spec | `validate_json.py` only |
+
+No agent has `webfetch` or `websearch` permissions.
+
+## Models
+
+No model names or API keys in agent prompts. Subagents use your logged-in OpenCode model (Codex OAuth). Configure via `/connect` in the OpenCode TUI.

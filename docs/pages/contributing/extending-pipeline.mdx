@@ -1,0 +1,210 @@
+# Extending the Pipeline
+
+How to add agents, pipeline steps, human gates, or modify existing behavior.
+
+## Adding a new subagent
+
+### 1. Write the agent prompt
+
+Create `.opencode/agents/<name>.md`:
+
+```markdown
+You are the <name> agent in an articulated-asset pipeline.
+
+Your single job: <one sentence>. Write exactly one file and stop.
+
+## Inputs
+- ...
+
+## Output
+Conform to `schemas/<name>.schema.json`.
+
+## After writing
+Validate:
+python3 tool_scripts/validate_json.py --schema schemas/<name>.schema.json --data <path>
+```
+
+Follow existing conventions:
+- Single job, single artifact
+- Validate after writing
+- No communication with other subagents
+
+### 2. Register in opencode.json
+
+```json
+{
+  "agent": {
+    "<name>": {
+      "description": "One-line description.",
+      "mode": "subagent",
+      "temperature": 0.2,
+      "prompt": "{file:./.opencode/agents/<name>.md}",
+      "permission": {
+        "edit": {"*": "deny", ".intermediate/**": "allow"},
+        "bash": {"*": "deny", "*validate_json.py*": "allow"},
+        "read": "allow",
+        "glob": "allow",
+        "list": "allow",
+        "webfetch": "deny",
+        "websearch": "deny",
+        "task": "deny"
+      }
+    }
+  }
+}
+```
+
+If the agent needs to run a specific script, allow only that script in bash permissions (see `imagegen` → `openai_imagegen.py`).
+
+### 3. Create a JSON Schema
+
+Add `schemas/<name>.schema.json` with `additionalProperties: false` on all objects.
+
+### 4. Update the orchestrator prompt
+
+Edit `.opencode/agents/orchestrator.md` to:
+- Add the step in the correct position
+- Specify inputs passed to the subagent (Task tool)
+- Specify output path and skip conditions
+- Add validation call after the step
+
+### 5. Update AGENTS.md
+
+Add the step to the pipeline order section so `opencode /init` stays accurate.
+
+---
+
+## Adding a new tool script
+
+### 1. Write the script
+
+Place in `tool_scripts/`. Include a module docstring with:
+- What it does
+- Run command (with Blender `--` syntax if applicable)
+- JSON config schema (if config-driven)
+
+Follow existing patterns:
+- `argparse` for CLI args
+- Config-driven scripts accept `--config <json>`
+- API keys from environment, never from config files
+- Idempotent where possible (skip existing outputs)
+
+### 2. Grant orchestrator bash permission
+
+In `opencode.json`, add to orchestrator's bash allowlist:
+
+```json
+"bash": {
+  "*": "deny",
+  "python *": "allow",
+  "python3 *": "allow",
+  "blender *": "allow"
+}
+```
+
+Broad `python*` / `blender*` patterns already cover new scripts.
+
+### 3. Wire into orchestrator prompt
+
+Add step with:
+- Config JSON the orchestrator should write (templated from `config.yaml` if needed)
+- Exact bash command
+- Skip condition (which output file to check)
+
+### 4. Add config block (optional)
+
+If the script needs tunable settings, add a block to `config.yaml` and document it.
+
+---
+
+## Adding a human gate
+
+Human gates are enforced in the orchestrator prompt, not in code:
+
+```markdown
+## Human gate (<name>)
+
+After <step>, show the user <what to review>.
+Wait for their confirmation. Do not proceed on your own.
+
+- If they approve, write `<run_dir>/<gate_file>` and continue.
+- Skip this gate only if `<gate_file>` already exists.
+```
+
+Examples in the current pipeline:
+- Parts gate → waits before image generation
+- Placement gate → writes `placement.confirmed` before USD export
+
+---
+
+## Modifying the placement loop
+
+### Change exit conditions
+
+Edit `config.yaml` `loop` block:
+
+```yaml
+loop:
+  min_loops: 2
+  max_loops: 10
+  score_threshold: 90
+  no_improvement_patience: 3
+```
+
+### Change critic behavior
+
+Edit `.opencode/agents/critic.md` — scoring guidance, lock criteria, correction types.
+
+### Change placement starting point
+
+Edit `.opencode/agents/placement.md` or `compute_placement_scales.py` for hint computation.
+
+---
+
+## Adding a new config block
+
+1. Add block to `config.yaml` with comments
+2. Document in orchestrator prompt how to template it into config JSONs
+3. Update docs Configuration page
+
+---
+
+## Swapping a subagent
+
+Because each subagent is a discrete node with a defined input/output contract, you can swap one without touching the rest:
+
+1. Keep the same output artifact and schema
+2. Replace the prompt in `.opencode/agents/<name>.md`
+3. Or point `opencode.json` to a new prompt file
+4. Run a test pipeline and compare outputs
+
+Example: replace the placement agent's model or prompt style while keeping `assembly.json` schema unchanged.
+
+---
+
+## Inserting a step mid-pipeline
+
+1. Identify the artifact it consumes and produces
+2. Add schema if new artifact type
+3. Add orchestrator prompt section with skip logic
+4. Update AGENTS.md pipeline order
+
+The orchestrator's skip logic pattern:
+
+```
+Skip if <output_path> already exists and validates, unless the user asks to redo.
+```
+
+---
+
+## Production hardening path
+
+v0 is prompt-orchestrated. For production:
+
+1. **Explicit state machine** — replace orchestrator prompt routing with a Python/TypeScript graph
+2. **Typed IRs at each edge** — schema validation becomes compile-time, not runtime
+3. **Fault tolerance** — retry/backtrack nodes when IR quality is below threshold
+4. **Deterministic branching** — exit conditions as code, not model judgment
+5. **Audit log** — record every agent input/output for debugging
+
+The same stages, agents, schemas, and tools transfer directly — only the control flow layer changes.

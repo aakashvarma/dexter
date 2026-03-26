@@ -1,0 +1,240 @@
+# Intermediate Representation
+
+Dexter passes data between agents and tools through typed **Intermediate Representations (IRs)** — JSON artifacts with defined schemas. Each IR is produced by one agent or script and consumed by the next step.
+
+## IR overview
+
+| IR name | File | Producer | Consumer |
+|---------|------|----------|----------|
+| **Parts IR** | `parts.json` | analyze agent | prompts, placement hints, placement |
+| **Layout IR** | `assembly.json` | placement agent | blender_assemble, critic, USD export |
+| **Critique IR** | `critic.json` | critic agent | placement (iteration 2+), orchestrator |
+| **Placement hints** | `placement_hints.json` | compute_placement_scales.py | placement (iteration 1) |
+| **Component dims** | `component_dims.json` | blender_measure_glbs.py | placement hints, placement, critic |
+| **Render views** | `render_views.json` | orchestrator | blender_render_views.py |
+
+## Parts IR (`parts.json`)
+
+Structured output of the **analyze** subagent: the part list and kinematic tree.
+
+```json
+{
+  "object": "dishwasher",
+  "parts": [
+    {
+      "name": "cabinet_body",
+      "description": "The main dishwasher cabinet with insulated walls.",
+      "parent": null,
+      "joint_type": "fixed"
+    },
+    {
+      "name": "front_door",
+      "description": "The front drop-down door panel.",
+      "parent": "cabinet_body",
+      "joint_type": "revolute",
+      "size_fraction": [1.00, 0.06, 0.60],
+      "position_in_parent": "center",
+      "hinge_side": "bottom"
+    }
+  ]
+}
+```
+
+**Key fields for downstream steps:**
+- `name` → file stem for PNGs, GLBs, and assembly links
+- `description` → copied into image generation prompts
+- `size_fraction` + `position_in_parent` → placement hint computation
+- `hinge_side` / `slide_axis` → open pose calculation
+
+Approved by human gate before 3D generation begins.
+
+## Layout IR (`assembly.json`)
+
+Structured output of the **placement** subagent: position, orientation, and scale for each link.
+
+```json
+{
+  "root": ".intermediate/dishwasher/001",
+  "robot_name": "dishwasher",
+  "links": [
+    {
+      "name": "cabinet_body",
+      "parent": null,
+      "visual_mesh": "component_glbs/cabinet_body.glb",
+      "collision_mesh": "component_glbs/cabinet_body.glb",
+      "origin": {"xyz": [0.0, 0.0, 0.425], "rpy_deg": [0.0, 0.0, 0.0]},
+      "scale": [1.7, 1.6, 1.8]
+    }
+  ]
+}
+```
+
+This single IR drives:
+1. **Blender assembly** — visual scene for rendering
+2. **Critic comparison** — world-space dimensions from scale + raw dims
+3. **USD export** — geometry for Isaac Sim
+
+### Transform chain
+
+`blender_assemble.py` applies:
+
+```
+world_pos = parent_scale × (origin_xyz + child_scale × raw_mesh_center)
+```
+
+**Scale inheritance (non-negotiable):**
+
+```
+child_scale[axis] = target_world_size[axis] / (parent_scale[axis] × raw_GLB_size[axis])
+```
+
+**Back-computing origin from target world position:**
+
+```
+origin_xyz[axis] = target_world_center[axis] / parent_scale[axis]
+                   − child_scale[axis] × raw_mesh_center[axis]
+```
+
+With rotation (`rpy_deg = [0, 0, θ]`):
+
+```
+rotated = R_Z(θ) × (child_scale × raw_mesh_center)
+origin_xyz = target_world_center / parent_scale − rotated
+```
+
+### Door rotation conventions
+
+| Hinge type | Axis | Sign |
+|-----------|------|------|
+| Left-hinged door | `rpy_deg[2]` (Z) | Negative opens forward |
+| Right-hinged door | `rpy_deg[2]` (Z) | Positive opens forward |
+| Bottom-hinged door | `rpy_deg[0]` (X) | Positive drops down |
+| Top-hinged lid | `rpy_deg[1]` (Y) | Positive opens backward |
+
+## Critique IR (`critic.json`)
+
+Structured output of the **critic** subagent: score and per-component layout fixes.
+
+```json
+{
+  "iteration": 3,
+  "score": 78,
+  "pass": false,
+  "summary": "Door angle too shallow; rack position good.",
+  "issues": [
+    {
+      "component": "front_door",
+      "problem": "Open angle ~30° but source shows ~45°.",
+      "suggested_rotation_delta": [15.0, 0.0, 0.0]
+    },
+    {
+      "component": "cabinet_body",
+      "locked": true,
+      "problem": "Correct size, position, no collisions."
+    }
+  ],
+  "per_view_notes": {
+    "front": "Door angle too shallow.",
+    "top": "Alignment OK.",
+    "left": "Rack depth matches.",
+    "isometric": "Overall shape good."
+  }
+}
+```
+
+Corrections are in **parent-local space**:
+
+```
+origin_delta[axis] = Δworld[axis] / parent_scale[axis]
+```
+
+## Placement hints (`placement_hints.json`)
+
+Pre-computed scales and poses from `compute_placement_scales.py`. Gives the placement agent geometrically correct starting values.
+
+```json
+{
+  "object": "dishwasher",
+  "root_name": "cabinet_body",
+  "root_world_dims": [0.60, 0.60, 0.85],
+  "root_scale": [1.7, 1.6, 1.8],
+  "parts": [
+    {
+      "name": "front_door",
+      "child_scale": [1.25, 0.51, 0.85],
+      "closed_pose": {"origin_xyz": [...], "rpy_deg": [0,0,0]},
+      "open_pose": {"open_origin_xyz": [...], "open_rpy_deg": [45,0,0]}
+    }
+  ]
+}
+```
+
+All values derived from `parts.json` geometry fields — no guessing. If hints look wrong, fix `parts.json` and regenerate.
+
+## Component dims (`component_dims.json`)
+
+Raw GLB bounding boxes before any scale:
+
+```json
+{
+  "parts": {
+    "front_door": {
+      "size": [0.28, 0.05, 0.33],
+      "center": [0.0, 0.0, 0.17],
+      "min": [-0.14, -0.025, 0.005],
+      "max": [0.14, 0.025, 0.335]
+    }
+  }
+}
+```
+
+Never compare raw dims to the source image directly — always compute world size:
+
+```
+world_size[axis] = parent_scale[axis] × child_scale[axis] × raw_size[axis]
+```
+
+## Data flow chain
+
+```
+source.png
+  → parts.json           (analyze)
+  → prompts.json         (build_component_prompts.py)
+  → component_images/    (openai_imagegen.py)
+  → component_glbs/      (fal_image_to_3d.py)
+  → component_dims.json  (blender_measure_glbs.py)
+  → placement_hints.json (compute_placement_scales.py)
+  → assembly.json        (placement)  ←→ critic.json (critic)
+  → assembled.blend      (blender_assemble.py)
+  → robot.usda           (blender_export_usd.py)
+```
+
+## URDF mapping
+
+The Layout IR maps directly to URDF structure:
+
+| IR field | URDF element |
+|----------|-------------|
+| `links[].name` | `<link name="...">` |
+| `links[].visual_mesh` | `<mesh filename="...">` |
+| `links[].parent` + `joint_type` from parts.json | `<joint type="revolute">` |
+| `origin.xyz` + `origin.rpy_deg` | `<origin xyz="..." rpy="...">` |
+
+Example URDF fragment:
+
+```xml
+<robot name="dishwasher">
+  <link name="cabinet_body">
+    <visual><geometry><mesh filename="cabinet_body.glb"/></geometry></visual>
+  </link>
+  <link name="front_door">
+    <visual><geometry><mesh filename="front_door.glb"/></geometry></visual>
+  </link>
+  <joint name="front_door_joint" type="revolute">
+    <parent link="cabinet_body"/>
+    <child link="front_door"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="0" upper="1.57"/>
+  </joint>
+</robot>
+```

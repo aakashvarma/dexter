@@ -1,0 +1,104 @@
+# Schemas
+
+Every pipeline artifact that flows between agents and tools is validated against a JSON Schema in `schemas/`. Validation is the gate that prevents bad data from propagating downstream.
+
+## Validation command
+
+```bash
+python3 tool_scripts/validate_json.py \
+  --schema schemas/<name>.schema.json \
+  --data <path/to/artifact.json>
+```
+
+- Prints `OK` and exits 0 when valid
+- Prints each schema error and exits 1 when invalid
+
+## Schema index
+
+| Schema | Artifact | Written by | When validated |
+|--------|----------|-----------|----------------|
+| `parts.schema.json` | `parts.json` | analyze agent | After analyze step |
+| `assembly.schema.json` | `assembly.json` | placement agent | Each placement iteration |
+| `critic.schema.json` | `critic.json` | critic agent | Each critique |
+| `placement_hints.schema.json` | `placement_hints.json` | compute_placement_scales.py | Before placement |
+| `render_views.schema.json` | `render_views.json` | orchestrator | Before rendering |
+| `component_dims.schema.json` | `component_dims.json` | blender_measure_glbs.py | After measurement |
+
+## Retry policy
+
+When validation fails, the orchestrator re-invokes the same subagent with errors appended. Repeats up to `loop.max_validation_retries` (default: 2).
+
+## parts.schema.json
+
+Top-level: `object` (string), `parts` (array, min 1).
+
+Per part — always required: `name`, `description`, `parent`, `joint_type`.
+
+Non-root parts also require: `size_fraction` `[w,d,h]`, `position_in_parent` (string).
+
+Revolute joints require: `hinge_side` (`left`|`right`|`top`|`bottom`).
+
+Prismatic joints require: `slide_axis` (`-y`|`+y`|`-x`|`+x`|`+z`|`-z`).
+
+All objects use `additionalProperties: false`.
+
+## assembly.schema.json
+
+Top-level: `root`, `robot_name`, `links` (array, min 1).
+
+Per link — all required: `name`, `parent`, `visual_mesh`, `collision_mesh`, `origin`, `scale`.
+
+`origin` requires: `xyz` `[x,y,z]`, `rpy_deg` `[rx,ry,rz]` (degrees, XYZ Euler).
+
+Schema description embeds the transform chain formulas for agent reference.
+
+## critic.schema.json
+
+Required: `iteration` (int ≥1), `score` (0–100), `pass` (bool), `summary`, `issues`, `per_view_notes`.
+
+Per issue — required: `component`, `problem`. Optional: `locked`, `axis`, `direction`, `suggested_delta`, `suggested_scale_factor`, `suggested_rotation_delta`.
+
+## placement_hints.schema.json
+
+Required: `object`, `root_name`, `root_world_dims`, `root_world_center`, `root_scale`, `parts`.
+
+Per part hint: `name`, `joint_type`, `child_scale`, `closed_pose` (with `world_center`, `origin_xyz`, `rpy_deg`). Optional: `open_pose`, `children` (recursive).
+
+## render_views.schema.json
+
+Required: `resolution` `[w,h]`, `samples`, `engine`, `file_format`, `cameras`.
+
+Per camera — required: `name`, `direction` `[x,y,z]`, `output`, `light_energy`, `light_type`. Optional: `margin` (default 1.3).
+
+**Do not add `location` or `look_at`** — the render script auto-frames.
+
+## component_dims.schema.json
+
+Required: `parts` (object map).
+
+Per part: `size`, `center`, `min`, `max` — each `[x,y,z]` arrays.
+
+## Design principles
+
+1. **`additionalProperties: false`** on all objects — strict field enforcement
+2. **Required fields explicit** — missing fields fail immediately
+3. **Descriptions document semantics** — each field explains its pipeline role
+4. **Transform math in schema descriptions** — `assembly.schema.json` embeds formulas
+
+## Validate a full run
+
+```bash
+RUN=.intermediate/dishwasher/001
+
+python3 tool_scripts/validate_json.py --schema schemas/parts.schema.json --data $RUN/parts.json
+python3 tool_scripts/validate_json.py --schema schemas/placement_hints.schema.json --data $RUN/placement_hints.json
+
+for iter in $RUN/iterations/*/; do
+  python3 tool_scripts/validate_json.py --schema schemas/assembly.schema.json --data $iter/assembly.json
+  python3 tool_scripts/validate_json.py --schema schemas/critic.schema.json --data $iter/critic.json
+done
+```
+
+## Adding a new schema
+
+See [Schemas & Validation](/contributing/schemas-and-validation) in the Developer Guide.
