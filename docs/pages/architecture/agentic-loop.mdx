@@ -1,8 +1,12 @@
-# Agentic Loop
+# How Dexter Works
 
-The agentic loop is the core control flow of Dexter. An orchestrator agent sequences subagents and tool scripts, pausing at two human gates, iterating placement until layout converges.
+Give Dexter a photo of a product. Within a single OpenCode session, it hands you back a fully articulated 3D asset — meshes, joints, textures, and a USD file ready to drop into NVIDIA Isaac Sim. This page walks through how that actually happens, step by step.
 
-## Full pipeline diagram
+## The big picture
+
+Dexter is built around a single orchestrator agent. You talk to the orchestrator; it runs everything else. It sequences four specialist subagents, calls a set of deterministic Python and Blender scripts, and pauses twice to ask for your sign-off before moving forward. There is no hidden driver script, no separate CLI — just one agent doing the coordination.
+
+Here is the full flow:
 
 ```mermaid
 flowchart TD
@@ -27,100 +31,92 @@ flowchart TD
     gate2 --> usd["blender_export_usd.py\n→ robot.usda"]
 ```
 
-## Six pipeline stages
+The pipeline divides cleanly into six stages. The first three stages happen once. Stages four and five repeat in a loop until the layout looks right. Stage six closes things out with the export.
 
-### Stage 1 — Part identification
+---
 
-**Agent:** `analyze` subagent
-**Output:** `parts.json` (Parts IR)
-**Human gate:** Yes — approve parts before any 3D generation
+## Stage 1 — Understanding the object
 
-The analyze agent reads the source image and proposes the minimal set of moving parts with joint types, geometry hints (`size_fraction`, `hinge_side`, `slide_axis`), and descriptions for image generation.
+Everything starts with the **analyze** agent reading your source photo.
 
-### Stage 2 — Per-part image generation
+The analyze agent's job is to break the object down into its meaningful moving parts. For a dishwasher that means identifying the cabinet body, the front door, the upper rack, and the lower rack — not just listing four blobs. For each part it records a name, a short description, what it connects to, and what kind of joint holds them together. A door that swings open is a revolute joint. A rack that slides in and out is prismatic. It also estimates how big each part is relative to its parent and which side the hinge is on.
 
-**Agent:** `imagegen` subagent → `openai_imagegen.py`
-**Output:** `component_images/<part>.png`
+This output — saved as `parts.json` — is the skeleton the rest of the pipeline builds on. Descriptions from it become image generation prompts. Joint types and geometry hints feed into placement later. If this file is wrong, everything downstream will be wrong too.
 
-One isolated, white-background render per part. Uses OpenAI `images.edit()` with `source.png` as visual reference for every call.
+That's why the orchestrator **stops here and asks you to review it** before spending any API credits on 3D generation. It is the cheapest point to catch errors.
 
-### Stage 3 — Mesh generation and measurement
+---
 
-**Scripts:** `fal_image_to_3d.py`, `blender_measure_glbs.py`, `compute_placement_scales.py`
-**Output:** `component_glbs/`, `component_dims.json`, `placement_hints.json`
+## Stage 2 — Generating component images
 
-Image-to-3D via fal.ai Hunyuan 3D. Blender measures raw bounding boxes. Placement hints pre-compute correct scales and poses from `parts.json` geometry fields.
+Once you confirm the parts list, the pipeline generates a clean isolated image for every component.
 
-### Stage 4–5 — Placement ↔ critic loop
+A script called `build_component_prompts.py` turns each part's description into an image prompt, asking for that component alone on a white background. Then the **imagegen** agent calls OpenAI's image editing API once per part. Every call uses your original source photo as reference, so the generated images keep the same visual style and proportions. The results land in `component_images/` — one PNG per part.
 
-**Agents:** `placement` subagent, `critic` subagent
-**Scripts:** `blender_assemble.py`, `blender_render_views.py`
-**Output per iteration:** `assembly.json`, `assembled.blend`, `renders/`, `critic.json`
+If you re-run this stage later, any PNG that already exists is skipped. Only missing parts get regenerated.
 
-Each round:
-1. Placement agent writes positions, orientations, scales into the Layout IR
-2. Blender assembles and renders four diagnostic views (front, top, left, isometric)
-3. Critic agent scores against the source image and returns structured fixes
+---
 
-**Iteration 1:** Start from `placement_hints.json`, match open/closed pose in source image.
-**Iteration 2+:** Apply critic corrections only; skip `locked` components; revert to best layout after regressions.
+## Stage 3 — Building and measuring the meshes
 
-### Stage 6 — Export
+With component images in hand, the pipeline converts each one into a 3D mesh.
 
-**Script:** `blender_export_usd.py`
-**Output:** `robot.usda` + `textures/` + `robot_prim_map.json`
-**Human gate:** Placement approval required (`placement.confirmed`)
+`fal_image_to_3d.py` sends each PNG to fal.ai, which runs Hunyuan 3D and returns a `.glb` file for every part. These meshes are not perfectly accurate — they are rough 3D reconstructions from a single image — but they are good enough for layout and rendering.
 
-## Human gates
+After the meshes arrive, Blender measures them. `blender_measure_glbs.py` opens each GLB and records its raw bounding box: exact width, depth, and height before any scaling. These numbers matter because mesh sizes from different 3D generation runs can vary wildly. Without measuring first, the placement agent would be guessing at dimensions.
 
-### Gate 1 — Parts review (before 3D generation)
+Finally, `compute_placement_scales.py` combines the measured sizes with geometry hints from `parts.json` to produce `placement_hints.json`. You tell the orchestrator the real-world size of the root part — for example, "this dishwasher cabinet is 60 cm wide, 60 cm deep, and 85 cm tall" — and the script computes the right scale factors for every part in the tree. The first placement iteration uses these hints directly, rather than starting from scratch.
 
-The orchestrator shows the parts list and **waits** for confirmation. Check:
-- All moving parts included with specific names (not `body`, `part_1`)
-- Descriptions match the image
-- `size_fraction`, `hinge_side`, `slide_axis` are plausible
+---
 
-### Gate 2 — Placement review (before USD export)
+## Stage 4 — Laying out the parts
 
-Shows best iteration renders, critic score, and `assembled.blend`. Options:
-- **Approve** → write `placement.confirmed`, continue to USD export
-- **Pick different iteration** → write `placement.confirmed` for that iteration
-- **More iterations** → resume loop
+Now the **placement** agent does the spatial reasoning.
 
-## Loop exit conditions
+It reads the source image, `parts.json`, the measured dimensions, and the pre-computed hints. It then writes `assembly.json` — a layout file describing exactly where each mesh sits in 3D space. Every part gets a position and rotation relative to its parent, and a scale factor that accounts for the full parent-child chain.
 
-Stop when **any** of:
+The first iteration uses `placement_hints.json` as a starting point and tries to match the pose in your photo. If the dishwasher door is open in the source image, placement opens it. If the racks are partially pulled out, placement pulls them out by a similar amount.
 
-| Condition | Config key |
-|-----------|-----------|
-| `score >= score_threshold` and `N >= min_loops` | `loop.score_threshold`, `loop.min_loops` |
-| `N >= max_loops` | `loop.max_loops` |
-| Score plateaued for N iterations | `loop.no_improvement_patience` |
+Once the layout file is written, `blender_assemble.py` loads all the meshes and builds a complete Blender scene from it, saved as `assembled.blend`. The orchestrator simultaneously writes `render_views.json`, defining four camera positions for the next stage.
 
-The orchestrator records the **best-scoring** iteration `B` even if a later iteration regresses.
+---
 
-## Validation gates
+## Stage 5 — Rendering and refining
 
-After every subagent write:
+This stage is where the loop actually happens.
 
-```bash
-python3 tool_scripts/validate_json.py \
-  --schema schemas/<name>.schema.json \
-  --data <path>
-```
+`blender_render_views.py` loads the assembled scene and renders four diagnostic images: front, top, left, and isometric. These are not beautiful renders — they are quick lit shots for inspection.
 
-On failure: re-invoke the same subagent with errors appended, up to `loop.max_validation_retries` times.
+The **critic** agent then looks at all four views alongside the original source photo and gives honest feedback. It writes a score from 0 to 100 and a note for every part. If a rack is sticking out through the side wall, the critic flags it. If the door angle is slightly off, the critic suggests a rotation delta. Parts that look correct get marked `locked`, which means placement will not touch them in the next round.
 
-## Resume semantics
+If the score is not good enough, the loop goes back to placement. But this time placement only applies the critic's specific fixes — it does not start over. Locked parts stay where they are. If a round accidentally makes things worse, placement falls back to the best-scoring layout from any earlier round. The orchestrator always tracks that best iteration.
 
-The orchestrator **always probes the run directory first**. For each step: if output exists and validates → skip. This means you can interrupt at any point and resume later.
+The loop keeps going until one of three things happens: the score crosses the threshold you set in `config.yaml`, the maximum number of iterations is reached, or the score stops improving for several rounds in a row.
+
+When the loop ends, the orchestrator stops again and shows you the results. You can approve the best layout, pick a different iteration, or ask for more rounds.
+
+---
+
+## Stage 6 — Exporting the final asset
+
+After you write `placement.confirmed`, the pipeline does its final step.
+
+`blender_export_usd.py` opens the approved `assembled.blend` and exports `robot.usda` — a Universal Scene Description file in Z-up coordinates with everything in metres. Material textures get extracted alongside it in a `textures/` folder so Isaac Sim can resolve them. A `robot_prim_map.json` file maps every Blender object name to its USD prim path, which is useful for debugging or scripting further downstream.
+
+---
+
+## A few things worth knowing
+
+**The orchestrator never forgets.** Before every step it checks whether the output already exists and validates. If it does, that step is skipped. This means you can interrupt a run at any point and pick up where you left off:
 
 ```bash
 opencode run --agent orchestrator -- "resume .intermediate/dishwasher/001/"
 ```
 
-## Why prompt-orchestrated (v0)
+**Every subagent output is validated.** JSON files from analyze, placement, and critic are all checked against JSON Schemas before the next step begins. If something is malformed, the orchestrator asks the same subagent to try again, up to a configurable limit.
 
-Dexter v0 uses the model to determine routing, branching, and exit conditions. This makes it fast to experiment with loop structure before committing to a hardened state machine. A production version would run the same stages as an explicit graph with fixed transitions and typed IRs at each edge — saving tokens, removing routing hallucination, and making the pipeline auditable.
+**Subagents never talk to each other.** The orchestrator is the only one with the full picture. It decides what to pass to each subagent, when to move forward, and when to stop. This makes the pipeline easy to debug — you can always trace what went wrong by reading the files in `.intermediate/`.
 
-See [Agents](/architecture/agents) for per-agent details.
+---
+
+For a detailed look at each agent, see [Agents](/architecture/agents). For every tool script, see [Tool Scripts](/architecture/tools). For a real run with actual outputs, see [Pipeline Run](/getting-started/pipeline-run).

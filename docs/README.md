@@ -6,10 +6,10 @@ Documentation site for the Dexter articulated-asset pipeline, built with [Nextra
 
 | Section | Contents |
 |---------|----------|
-| **Getting Started** | Requirements, installation, configuration, running |
+| **Getting Started** | Requirements, installation, configuration, **pipeline run** (walkthrough) |
 | **Architecture** | Overview, agentic loop, agents, IR, schemas, tools |
-| **Sample Runs & Troubleshooting** | Dishwasher walkthrough, common issues |
-| **Developer Guide** | Project structure, extending pipeline, schemas, local dev |
+| **Troubleshooting** | Common issues and recovery |
+| **Developer Guide** | Project structure, extending pipeline, local dev |
 
 ## Development
 
@@ -26,4 +26,4 @@ npm run build
 npm start
 ```
 
-Media assets are in `public/assets/` (images and videos from the Dexter blog).
+Media assets are in `public/assets/` (images and videos from the Dexter blog and example runs).

@@ -34,11 +34,15 @@ Dexter's output per run:
 
 ## How it works (at a glance)
 
-Dexter runs through [OpenCode](https://opencode.ai), a coding agent harness. An **orchestrator** agent sequences five subagents and deterministic tool scripts, pausing at two human gates:
+Dexter runs through [OpenCode](https://opencode.ai), a coding agent harness. An **orchestrator** agent sequences four subagents and deterministic tool scripts, pausing at two human gates:
 
 ![OpenCode agent harness](/assets/images/dexter/opencode_agent_harness.png)
 
-*The orchestrator routes input through five subagents; model runtimes and tools sit outside the loop.*
+*The orchestrator routes input through four subagents; model runtimes and tools sit outside the loop.*
+
+In the OpenCode TUI, press **Tab** or `/agents` and select **orchestrator** to run the pipeline:
+
+![Select the orchestrator agent in OpenCode](/assets/images/opencode/select-agent.png)
 
 See [Architecture](/architecture/overview) for the full system design.
 
@@ -51,13 +55,13 @@ export FAL_KEY=...          # fal.ai image-to-3D
 opencode run --agent orchestrator -- "build the dishwasher from input_images/dishwasher.png"
 ```
 
-Full setup: [Requirements](/getting-started/requirements) → [Installation](/getting-started/installation) → [Running a Pipeline](/getting-started/running).
+Full setup: [Requirements](/getting-started/requirements) → [Installation](/getting-started/installation) → [Pipeline Run](/getting-started/pipeline-run).
 
 ## Documentation
 
 | Section | Contents |
 |---------|----------|
-| [Getting Started](/getting-started/requirements) | Requirements, installation, configuration, running |
+| [Getting Started](/getting-started/requirements) | Requirements, installation, configuration, pipeline run |
 | [Architecture](/architecture/overview) | Agentic loop, agents, IRs, schemas, tool scripts |
-| [Sample Runs](/sample-runs/dishwasher) | Full dishwasher walkthrough with images and video |
+| [Troubleshooting](/sample-runs/troubleshooting) | Common failures and recovery |
 | [Developer Guide](/contributing/overview) | Project structure, extending the pipeline, local dev |

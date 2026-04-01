@@ -2,5 +2,5 @@
   "requirements": "Requirements",
   "installation": "Installation",
   "configuration": "Configuration",
-  "running": "Running a Pipeline"
+  "pipeline-run": "Pipeline Run"
 }
