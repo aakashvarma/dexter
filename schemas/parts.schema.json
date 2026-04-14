@@ -40,6 +40,14 @@
             "description": "URDF joint type connecting this part to its parent."
           },
 
+          "world_dims": {
+            "type": "array",
+            "items": {"type": "number", "minimum": 0},
+            "minItems": 3,
+            "maxItems": 3,
+            "description": "REQUIRED for the root part only. Real-world [width_m, depth_m, height_m] in metres, estimated from the source image. Optional on non-root parts to override size_fraction with exact world dimensions."
+          },
+
           "size_fraction": {
             "type": "array",
             "items": {"type": "number", "minimum": 0},
@@ -63,6 +71,20 @@
             "type": "string",
             "enum": ["-y", "+y", "-x", "+x", "+z", "-z"],
             "description": "REQUIRED for prismatic joints. The world-space direction the part moves when it opens or extends. Blender world axes: X = left(−)/right(+), Y = back(+)/front(−), Z = down(−)/up(+). '-y': slides toward the viewer / forward — the default for kitchen drawers, desk drawers. '+z': slides upward — e.g. an oven rack being lifted out. '-z': slides downward. '+x': slides to the right. '-x': slides to the left. '+y': slides backward / away from viewer (rare). Omit for non-prismatic joints."
+          },
+
+          "open_angle_deg": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 180,
+            "description": "REQUIRED for revolute joints. How many degrees the part is open in the source image (0 = fully closed, 90 = perpendicular, etc.). Omit for non-revolute joints."
+          },
+
+          "pullout_fraction": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "REQUIRED for prismatic joints. How far the part is extended in the source image as a fraction of its full travel along slide_axis (0 = fully closed, 0.5 = half extended, 1.0 = fully extended). Omit for non-prismatic joints."
           }
 
         }

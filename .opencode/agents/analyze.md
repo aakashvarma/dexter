@@ -30,6 +30,12 @@ The parent part's name, or `null` for the single root/base part.
 ### `joint_type`
 One of: `fixed`, `revolute`, `prismatic`, `continuous`, `floating`, `planar`.
 
+### `world_dims`   ← **REQUIRED for the root part only**
+Real-world size of the root/base part in metres: `[width_m, depth_m, height_m]`.
+Estimate from the source image and object type (e.g. a standard dishwasher cabinet
+≈ 0.60 × 0.60 × 0.85 m). Optional on non-root parts to override `size_fraction`
+with exact metre dimensions when `size_fraction` is not accurate enough.
+
 ### `size_fraction`   ← **REQUIRED for every non-root part**
 How large this part is as a fraction of its **parent's** world size:
 `[width_fraction, depth_fraction, height_fraction]`
@@ -121,6 +127,21 @@ The world-space direction the part moves when it opens/extends.
 | `-x`  | To the left                  | Left-sliding panel                  |
 | `+y`  | Away from viewer / backward  | Rear-opening magazine well          |
 
+### `open_angle_deg`   ← **REQUIRED for `revolute` joints only**
+How many degrees the part is open in the source image:
+- `0` — fully closed
+- `45`–`90` — partially or fully open (common for product photos)
+- `90` — perpendicular to the closed position
+
+Look at the image: if a door is shown open, estimate the angle. If closed, use `0`.
+
+### `pullout_fraction`   ← **REQUIRED for `prismatic` joints only**
+How far the part is extended in the source image, as a fraction of its full
+travel along `slide_axis`:
+- `0` — fully closed / flush
+- `0.3`–`0.5` — partially extended
+- `1.0` — fully extended
+
 ---
 
 ## How to decide what's a "part"
@@ -146,7 +167,8 @@ Write the result to the exact path given in the run message, conforming to
       "name": "cabinet_body",
       "description": "The main refrigerator cabinet body with insulated walls and internal shelving.",
       "parent": null,
-      "joint_type": "fixed"
+      "joint_type": "fixed",
+      "world_dims": [0.91, 0.70, 1.78]
     },
     {
       "name": "left_door",
@@ -155,7 +177,8 @@ Write the result to the exact path given in the run message, conforming to
       "joint_type": "revolute",
       "size_fraction": [0.50, 0.06, 0.65],
       "position_in_parent": "left",
-      "hinge_side": "left"
+      "hinge_side": "left",
+      "open_angle_deg": 0
     },
     {
       "name": "right_door",
@@ -164,7 +187,8 @@ Write the result to the exact path given in the run message, conforming to
       "joint_type": "revolute",
       "size_fraction": [0.50, 0.06, 0.65],
       "position_in_parent": "right",
-      "hinge_side": "right"
+      "hinge_side": "right",
+      "open_angle_deg": 0
     },
     {
       "name": "freezer_drawer",
@@ -173,16 +197,17 @@ Write the result to the exact path given in the run message, conforming to
       "joint_type": "prismatic",
       "size_fraction": [1.00, 1.00, 0.35],
       "position_in_parent": "bottom-center",
-      "slide_axis": "-y"
+      "slide_axis": "-y",
+      "pullout_fraction": 0
     }
   ]
 }
 ```
 
-After writing, validate with:
+After writing, validate the file you just wrote:
 
 ```
-python3 tool_scripts/validate_json.py --schema schemas/parts.schema.json --data <your file>
+python3 tool_scripts/validate_json.py --schema schemas/parts.schema.json --data <run_dir>/parts.json
 ```
 
-Fix any reported errors before finishing.
+Fix any reported errors and re-validate before finishing.

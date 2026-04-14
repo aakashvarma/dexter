@@ -49,8 +49,8 @@ def measure_glb(path: Path) -> dict:
     if not corners:
         raise RuntimeError(f"No mesh imported from {path}")
 
-    lo = Vector((min(c[i] for c in corners) for i in range(3)))
-    hi = Vector((max(c[i] for c in corners) for i in range(3)))
+    lo = Vector(min(c[i] for c in corners) for i in range(3))
+    hi = Vector(max(c[i] for c in corners) for i in range(3))
     return {
         "size": list(hi - lo),
         "center": list((lo + hi) / 2),

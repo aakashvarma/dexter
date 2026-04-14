@@ -68,8 +68,8 @@ def scene_bounds() -> tuple:
         if obj.type == "MESH"
         for corner in obj.bound_box
     ]
-    lo = Vector((min(c[i] for c in corners) for i in range(3)))
-    hi = Vector((max(c[i] for c in corners) for i in range(3)))
+    lo = Vector(min(c[i] for c in corners) for i in range(3))
+    hi = Vector(max(c[i] for c in corners) for i in range(3))
     center = (lo + hi) / 2
     return center, (hi - lo).length / 2
 

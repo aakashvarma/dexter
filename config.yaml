@@ -22,8 +22,18 @@ image_generation:
   model: "gpt-image-2"   # OpenAI image model (gpt-image-2 or dall-e-3)
   size: "1024x1024"       # "1024x1024" | "1536x1024" | "1024x1536"
   quality: "medium"       # "low" | "medium" | "high"
+  parts_file: parts.json                 # under <run_dir>/
+  output_dir: component_images           # under <run_dir>/
+  reference_image: source.png            # under <run_dir>/; passed to every images.edit() call
 
-fal:                               # templated into fal_image_to_3d.json
+placement_init:
+  parts_file: parts.json                 # under <run_dir>/; from analyze
+  dims_file: component_dims.json         # under <run_dir>/; from generate_components.py
+  output: placement_init.json            # under <run_dir>/
+
+fal:
+  output_dir: component_glbs             # under <run_dir>/
+  dims_output: component_dims.json       # under <run_dir>/; written by blender_measure_glbs.py
   endpoint: fal-ai/hunyuan-3d/v3.1/pro/image-to-3d
   generate_type: Normal
   enable_pbr: true

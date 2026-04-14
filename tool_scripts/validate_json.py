@@ -28,11 +28,6 @@ import jsonschema
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse the ``--schema`` and ``--data`` command-line arguments.
-
-    Returns:
-        Parsed arguments with ``schema`` and ``data`` paths.
-    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--schema", required=True)
     parser.add_argument("--data", required=True)
@@ -40,34 +35,17 @@ def parse_args() -> argparse.Namespace:
 
 
 def load_json(path: str) -> object:
-    """Load a JSON file from disk.
-
-    Args:
-        path: Path to the JSON file.
-
-    Returns:
-        Parsed JSON.
-    """
     return json.loads(Path(path).expanduser().resolve().read_text(encoding="utf-8"))
 
 
 def collect_errors(schema: dict, data: object) -> list[str]:
-    """Validate data against schema and collect human-readable errors.
-
-    Args:
-        schema: Parsed JSON Schema.
-        data: Parsed JSON data to validate.
-
-    Returns:
-        Sorted list of error messages; empty when the data is valid.
-    """
+    """Return sorted human-readable schema errors; empty list when valid."""
     validator = jsonschema.Draft202012Validator(schema)
     errors = sorted(validator.iter_errors(data), key=lambda e: list(e.path))
     return [f"{'/'.join(str(p) for p in err.path) or '<root>'}: {err.message}" for err in errors]
 
 
 def main() -> None:
-    """Validate the data file and exit non-zero on any schema error."""
     args = parse_args()
     schema = load_json(args.schema)
     data = load_json(args.data)

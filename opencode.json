@@ -2,7 +2,7 @@
   "$schema": "https://opencode.ai/config.json",
   "agent": {
     "orchestrator": {
-      "description": "Drives the full articulated-asset pipeline: runs deterministic scripts, invokes analyze/imagegen/placement/critic subagents, and owns ordering, retries, and stop conditions.",
+      "description": "Drives the full articulated-asset pipeline: runs deterministic scripts, invokes analyze/placement/critic subagents, and owns ordering, retries, and stop conditions.",
       "mode": "primary",
       "temperature": 0.2,
       "prompt": "{file:./.opencode/agents/orchestrator.md}",
@@ -32,22 +32,6 @@
       "permission": {
         "edit": {"*": "deny", ".intermediate/**": "allow"},
         "bash": {"*": "deny", "*validate_json.py*": "allow"},
-        "read": "allow",
-        "glob": "allow",
-        "list": "allow",
-        "webfetch": "deny",
-        "websearch": "deny",
-        "task": "deny"
-      }
-    },
-    "imagegen": {
-      "description": "Generates component PNGs by running tool_scripts/openai_imagegen.py — does not generate images natively.",
-      "mode": "subagent",
-      "temperature": 0.2,
-      "prompt": "{file:./.opencode/agents/imagegen.md}",
-      "permission": {
-        "edit": {"*": "deny", ".intermediate/**": "allow"},
-        "bash": {"*": "deny", "*openai_imagegen.py*": "allow"},
         "read": "allow",
         "glob": "allow",
         "list": "allow",

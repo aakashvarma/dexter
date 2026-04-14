@@ -50,7 +50,7 @@ opencode          # then /connect to authenticate
 pip install -r requirements.txt
 
 # 3. API keys
-export OPENAI_API_KEY=...   # component PNGs (openai_imagegen.py)
+export OPENAI_API_KEY=...   # component PNGs (generate_components.py)
 export FAL_KEY=...          # image-to-3D GLBs (fal_image_to_3d.py)
 # blender must be on PATH (or set paths.blender_binary in config.yaml)
 

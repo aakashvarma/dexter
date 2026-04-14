@@ -8,57 +8,34 @@ critique file. Judge **position and size** equally, and flag mesh collisions
 
 - The source image of the target object.
 - The rendered views of the current assembly (front, top, left, isometric).
-- `component_dims.json`: each part's raw bounding box (`size`, `center`, `min`,
-  `max` in Blender units ≈ metres before any scale is applied).
-- The current `assembly.json`: contains the actual `scale` and `origin.xyz` used.
+- `world_dims.json`: pre-computed per-part world dimensions (see below). Do not
+  compute these yourself.
 - The exact `critic.json` output path and the current iteration number.
 
-## How to compute world dimensions from assembly.json
+## world_dims.json structure
 
-Use the transform chain that `blender_assemble.py` applies:
+For each part:
+- `world_size [W, D, H]` — actual world dimensions in metres.
+- `world_center [x, y, z]` — world-space centre position.
+- `world_min`, `world_max` — world-space bounding box corners.
+- `parent_scale [sx, sy, sz]` — scale of the parent link (use this to convert a
+  desired world-space position shift Δworld into `suggested_delta`:
+  `delta[axis] = Δworld[axis] / parent_scale[axis]`).
 
-```
-world_size[axis]   = parent_scale[axis] × child_scale[axis] × raw_size[axis]
-world_center[axis] = parent_scale[axis] × (origin_xyz[axis]
-                     + child_scale[axis] × raw_mesh_center[axis])
-```
+Top-level `collisions` lists any pairs of parts whose bounding boxes already
+overlap — include these as issues without recomputing.
 
-For a root part (no parent): `world_size = root_scale × raw_size`.
+## Suggested corrections
 
-**Always compute world dimensions before judging** — do not compare raw GLB
-extents to the source image. A part with small raw dims but large scale may be
-correct; one with large raw dims but small scale may be wrong.
+Use `world_size` from `world_dims.json` to judge scale and position directly:
 
-## How to compute suggested corrections
-
-**Scale correction** — if the part looks W_target wide but currently measures
-W_current wide in the world:
-
-```
-suggested_scale_factor = W_target / W_current   (uniform)
-```
-
-For a per-axis fix, provide `suggested_scale_factor` as an array [sx, sy, sz]
-where each axis scales by that factor.  Note: the schema accepts a single number
-for uniform scaling; use the `problem` field to specify per-axis deltas as text
-if the schema only allows a scalar.
-
-**Position correction** — to move a child's world center by Δworld:
-
-```
-origin_delta[axis] = Δworld[axis] / parent_scale[axis]
-```
-
-Provide this as `suggested_delta [dx, dy, dz]` in parent-local space.
-
-**Rotation correction** — for a revolute door whose open angle is wrong:
-
-```
-suggested_rotation_delta = [0, 0, Δθ_deg]
-```
-
-Positive Δθ opens a right-hinged door further; negative opens a left-hinged door
-further. Use the top-view render to judge the open angle.
+- **Scale** — if a part looks W_target wide but measures W_current in `world_size`:
+  `suggested_scale_factor = W_target / W_current` (uniform), or array per axis.
+- **Position** — to shift a part's world centre by Δworld:
+  `suggested_delta[axis] = Δworld[axis] / parent_scale[axis]` (from `world_dims.json`).
+- **Rotation** — for revolute joints, `suggested_rotation_delta = [0, 0, Δθ_deg]`;
+  positive opens a right-hinged door further, negative opens a left-hinged door.
+  Use the top-view render to judge the open angle.
 
 ## What to write
 
@@ -73,8 +50,8 @@ Conform to `schemas/critic.schema.json`:
      (depth, drawer pull-out), and isometric views.
   3. **Orientation** — for revolute/prismatic joints, is the open angle or
      pull-out distance correct? Use top view for door angles.
-  4. **Collisions** — do world bounding boxes overlap? Compute from assembly.json
-     + component_dims.json. Flag if any two parts interpenetrate.
+  4. **Collisions** — check `world_dims.json` top-level `collisions` list. Flag
+     every pair listed there.
 
   Give **at most one decisive correction per component** (the largest error):
   - `suggested_delta [dx, dy, dz]`: in parent-local space (divide world delta by
@@ -105,9 +82,11 @@ own diameter.
 
 ## After writing
 
-Validate:
+Validate the file you just wrote:
+
 ```
 python3 tool_scripts/validate_json.py --schema schemas/critic.schema.json \
-    --data <your file>
+    --data <run_dir>/iterations/<n>/critic.json
 ```
-Fix any errors before finishing.
+
+Fix any reported errors and re-validate before finishing.
