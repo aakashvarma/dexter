@@ -1,6 +1,6 @@
 # Architecture Overview
 
-Dexter is an **orchestrator-driven agentic pipeline**. One primary OpenCode agent coordinates deterministic tool scripts and four specialized subagents. There is no standalone Python pipeline driver — the orchestrator is the only entrypoint.
+Dexter is an **orchestrator-driven agentic pipeline**. One primary OpenCode agent coordinates deterministic tool scripts and two specialized subagents. There is no standalone Python pipeline driver — the orchestrator is the only entrypoint.
 
 ## System diagram
 
@@ -10,22 +10,20 @@ Dexter is an **orchestrator-driven agentic pipeline**. One primary OpenCode agen
 
 You provide a prompt — for example, *"build the dishwasher from `input_images/dishwasher.png`"*. The **orchestrator** is the only entrypoint (`opencode.json` → `orchestrator` agent). It reads `config.yaml`, probes `.intermediate/<asset>/<NNN>/` for existing artifacts, decides which step to run next, and invokes subagents through OpenCode's Task tool. Subagents never talk to each other; the orchestrator passes context between them.
 
-### Subagents (left to right)
+### Subagents
 
 Each subagent writes **one artifact** and exits:
 
-| Subagent | Role in the diagram | Output |
-|----------|---------------------|--------|
-| **Analyser** | Reads the source image and decomposes the object into moving parts | `parts.json` (Parts IR) |
-| **Image Gen** | Does not generate images itself — runs `openai_imagegen.py` per part | `component_images/*.png` |
-| **Placement** | Arranges GLBs to match the source image in position and scale | `assembly.json` (Layout IR) per iteration |
-| **Critic** | Scores rendered views against the source image | `critic.json` (Critique IR) |
+| Subagent | Role | Output |
+|----------|------|--------|
+| **analyze** | Reads the source image and decomposes the object into moving parts | `parts.json` |
+| **critic** | Scores rendered views against the source image | `critic.json` per iteration |
 
-Between subagent steps the orchestrator runs **tool scripts** directly: `build_component_prompts.py`, `fal_image_to_3d.py`, `blender_measure_glbs.py`, `compute_placement_scales.py`, `blender_assemble.py`, `blender_render_views.py`, and finally `blender_export_usd.py`.
+Between subagent steps the orchestrator runs **tool scripts** directly: `generate_components.py`, `initialize_placement.py`, `apply_critic.py`, `blender_assemble.py`, `blender_render_views.py`, `compute_world_dims.py`, and finally `blender_export_usd.py`.
 
-**Human gates** (shown as return arrows to the user in the diagram): you review `parts.json` before any 3D generation, and the best placement iteration before USD export (`placement.confirmed`).
+**Human gates**: you review `parts.json` before any 3D generation, and the best placement iteration before USD export.
 
-**Placement ↔ critic loop** (the **N×** arrow): each round, placement writes `assembly.json`, Blender assembles and renders four views, and the critic returns a score plus per-component fixes. Placement iteration 2+ applies only those corrections. The loop stops when `config.yaml` exit conditions are met; the orchestrator keeps the best-scoring iteration.
+**Placement ↔ critic loop**: iteration 001's `assembly.json` comes from `initialize_placement.py`. Later iterations use `apply_critic.py` to apply critic corrections deterministically. Each round assembles, renders four views, computes world dims, and critiques. The loop stops when `config.yaml` exit conditions are met; the orchestrator keeps the best-scoring iteration.
 
 ### Model runtime
 
@@ -33,13 +31,12 @@ Subagents reason through your logged-in OpenCode model (Codex OAuth). Model name
 
 ### Tools
 
-The red **Tools** box is deterministic code the orchestrator runs via bash:
+Deterministic code the orchestrator runs via bash:
 
-- **Image gen** — `openai_imagegen.py` (`OPENAI_API_KEY`)
-- **Mesh gen** — `fal_image_to_3d.py` (`FAL_KEY`)
-- **Blender** — measure GLBs, assemble scenes, render critique views, export USD
-
-> **Diagram vs v0 code:** The harness image may show a **Joint Gen** subagent that emits URDF. In the current repo, articulation export is not a separate subagent — after you approve placement, the orchestrator runs `blender_export_usd.py` to produce `robot.usda`.
+- **Component generation** — `generate_components.py` (`OPENAI_API_KEY`, `FAL_KEY`)
+- **Placement init** — `initialize_placement.py` builds `placement_init.json` and `iterations/001/assembly.json`
+- **Placement refinement** — `apply_critic.py` applies critic deltas to prior `assembly.json`
+- **Blender** — assemble scenes, render critique views, export USD
 
 ### Outputs
 
@@ -55,7 +52,7 @@ All intermediate files accumulate under `.intermediate/<asset>/<NNN>/`. See [Pip
 | Topic | Page | What it covers |
 |-------|------|---------------|
 | **Agentic loop** | [Agentic Loop](/architecture/agentic-loop) | Full pipeline flow, human gates, loop exit rules |
-| **Agents** | [Agents](/architecture/agents) | Orchestrator + four subagents, permissions, prompts |
+| **Agents** | [Agents](/architecture/agents) | Orchestrator + subagents, permissions, prompts |
 | **Intermediate Representation** | [IR](/architecture/intermediate-representation) | Parts IR, Layout IR, Critique IR, data flow |
 | **Schemas** | [Schemas](/architecture/schemas) | JSON Schema validation for every artifact |
 | **Tool Scripts** | [Tools](/architecture/tools) | Deterministic Python and Blender scripts |
@@ -78,10 +75,8 @@ Pipeline output: `.intermediate/<asset>/<NNN>/` (gitignored).
 
 ## Downstream consumers
 
-Dexter produces URDF/USD packages consumed by:
+Dexter produces USD packages consumed by:
 
 - **NVIDIA Isaac Sim** — primary target; PhysX articulation from USD prims
-- **Genesis World** — URDF, MJCF, GLB, USD import
-- **ROS** — URDF for MoveIt, Gazebo
 
 Dexter does **not** run inside any simulator — it is the step before those tools get useful content.

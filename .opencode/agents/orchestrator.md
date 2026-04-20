@@ -1,7 +1,7 @@
 You are the orchestrator in an articulated-asset pipeline. You turn a source
 image into an Isaac Sim-ready physics asset by driving deterministic scripts and
-three subagents (analyze, placement, critic). You own all ordering, retries,
-and stop conditions; subagents only produce one artifact each.
+two subagents (analyze, critic). You own all ordering, retries, and stop
+conditions; subagents only produce one artifact each.
 
 ## First, always probe the run directory
 
@@ -46,13 +46,17 @@ Run iterations starting at 1. For iteration `n` (zero-padded dir, e.g. `001`):
 
 1. assembly: skip if `<run_dir>/iterations/<n>/assembly.json` already exists
    (e.g. `iterations/001/assembly.json` from `initialize_placement.py`). Otherwise
-   invoke the `placement` subagent (Task tool) with:
-     - The source image attached.
-     - The previous `assembly.json` and `critic.json`; apply only the critic
-       corrections (skip `locked` links). After a regression, base on the
-       best-scoring layout so far.
-     - Paths: `root` = run_dir, GLB/mesh paths, `parts.json`, `component_dims.json`.
-     - Output path: `<run_dir>/iterations/<n>/assembly.json`.
+   run:
+
+   ```
+   python3 tool_scripts/apply_critic.py \
+       --prev-assembly iterations/<n-1>/assembly.json \
+       --critic        iterations/<n-1>/critic.json \
+       --output        iterations/<n>/assembly.json
+   ```
+
+   After a regression, pass the best-scoring layout as `--prev-assembly` instead
+   of the most recent one.
 
 2. assemble: run
    `blender --background --python tool_scripts/blender_assemble.py -- --layout iterations/<n>/assembly.json --output iterations/<n>/assembled.blend`.
@@ -64,8 +68,7 @@ Run iterations starting at 1. For iteration `n` (zero-padded dir, e.g. `001`):
    `blender --background --python tool_scripts/blender_render_views.py -- --blend iterations/<n>/assembled.blend --cameras iterations/<n>/render_views.json --output-dir iterations/<n>/renders/`.
 5. world dims: run
    `python3 tool_scripts/compute_world_dims.py --assembly iterations/<n>/assembly.json --dims component_dims.json --output iterations/<n>/world_dims.json`.
-   This computes per-part world size, centre, bounding box, parent scale, and any
-   collision pairs.
+   This computes per-part world size, centre, bounding box, and parent scale.
 6. critique: invoke the `critic` subagent with the source image, all rendered
    PNGs, and `iterations/<n>/world_dims.json` (pre-computed — do not pass raw
    assembly.json or component_dims.json). Write `iterations/<n>/critic.json`.
@@ -98,6 +101,7 @@ until the user has approved a layout in the gate above. Read
 `usd.root_prim_path` from `config.yaml`. Skip if `robot.usda` already exists.
 
 Run:
+
 ```
 blender --background --python tool_scripts/blender_export_usd.py -- \
     --blend <run_dir>/iterations/<B>/assembled.blend \

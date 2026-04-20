@@ -61,7 +61,7 @@ Implementation: `jsonschema` library. Prints `OK` (exit 0) or error list (exit 1
 
 ### Recursive definitions
 
-Use `$defs` for nested structures (see `placement_hints.schema.json`):
+Use `$defs` for nested structures (see `placement_init.schema.json`):
 
 ```json
 "$defs": {
@@ -153,9 +153,9 @@ python3 tool_scripts/validate_json.py \
 | Schema | IR name | Producer |
 |--------|---------|----------|
 | `parts.schema.json` | Parts IR | analyze |
-| `assembly.schema.json` | Layout IR | placement |
+| `assembly.schema.json` | Layout IR | initialize_placement.py / apply_critic.py |
 | `critic.schema.json` | Critique IR | critic |
-| `placement_hints.schema.json` | Placement hints | compute_placement_scales.py |
+| `placement_init.schema.json` | Placement init | initialize_placement.py |
 | `render_views.schema.json` | Render plan | orchestrator |
 | `component_dims.schema.json` | Component dims | blender_measure_glbs.py |
 

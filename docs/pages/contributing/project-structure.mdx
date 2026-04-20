@@ -6,8 +6,6 @@ dexter/
 │   └── agents/                  # Agent prompts (source of truth for behavior)
 │       ├── orchestrator.md      # Primary agent — owns all control flow
 │       ├── analyze.md           # Parts decomposition
-│       ├── imagegen.md          # Component PNG generation
-│       ├── placement.md         # Layout IR writer
 │       └── critic.md            # Critique IR writer
 │
 ├── config.yaml                  # Pipeline knobs (loops, fal, render, USD)
@@ -18,23 +16,20 @@ dexter/
 │   ├── parts.schema.json
 │   ├── assembly.schema.json
 │   ├── critic.schema.json
-│   ├── placement_hints.schema.json
+│   ├── placement_init.schema.json
 │   ├── render_views.schema.json
 │   └── component_dims.schema.json
 │
 ├── tool_scripts/                # Deterministic pipeline scripts
-│   ├── build_component_prompts.py
-│   ├── openai_imagegen.py
-│   ├── fal_image_to_3d.py
+│   ├── generate_components.py
+│   ├── initialize_placement.py
+│   ├── apply_critic.py
+│   ├── compute_world_dims.py
 │   ├── blender_measure_glbs.py
-│   ├── compute_placement_scales.py
 │   ├── blender_assemble.py
 │   ├── blender_render_views.py
 │   ├── blender_export_usd.py
-│   ├── validate_json.py
-│   ├── build_urdf.py
-│   ├── view_urdf.py
-│   └── place_assets_to_assembly.py
+│   └── validate_json.py
 │
 ├── input_images/                # Bundled source photos
 │   ├── dishwasher.png
@@ -65,32 +60,30 @@ The orchestrator has broad bash permissions (`python*`, `blender*`). Subagents a
 ### config.yaml
 
 Read by the orchestrator at run start. Contains:
+
 - `paths` — directories and blender binary
 - `loop` — iteration exit conditions
 - `image_generation` — OpenAI model settings
 - `fal` — fal.ai 3D model settings
+- `placement_init` — paths for `initialize_placement.py`
 - `render` — Blender render defaults
 - `usd` — USD export settings
 
-Models are **not** configured here — subagents use the logged-in OpenCode model.
-
 ### AGENTS.md
 
-Written by `opencode /init`. Concise pipeline semantics for agents: step order, gates, gotchas. When in doubt, trust `opencode.json` and agent prompts over `AGENTS.md`.
+Concise pipeline semantics for agents: step order, gates, gotchas. When in doubt, trust `opencode.json` and agent prompts over `AGENTS.md`.
 
 ### .opencode/agents/*.md
 
-The actual instructions each agent follows. The orchestrator prompt is the most detailed — it specifies exact config JSON formats, step ordering, and gate behavior.
+The actual instructions each agent follows. The orchestrator prompt is the most detailed — it specifies exact step ordering and gate behavior.
 
 ### schemas/
 
-JSON Schema Draft 2020-12 files. All use `additionalProperties: false`. Field `description` strings document pipeline semantics and sometimes embed transform formulas.
+JSON Schema Draft 2020-12 files. All use `additionalProperties: false`.
 
 ### tool_scripts/
 
 Python scripts (stdlib + requirements.txt deps) and Blender scripts (`import bpy`). Blender scripts parse args after `--` in `sys.argv`.
-
-Docstrings at the top of each script document: what it does, run command, and JSON config schema.
 
 ## Run directory (.intermediate/)
 
@@ -99,22 +92,18 @@ Gitignored. Structure per run:
 ```
 .intermediate/<asset>/<NNN>/
   source.png
-  parts.json                     # Parts IR
-  prompts.json
+  parts.json
   component_dims.json
-  placement_hints.json
-  placement.confirmed            # human-approved iteration id
-  build_component_prompts.json   # orchestrator-written configs
-  openai_imagegen.json
-  fal_image_to_3d.json
+  placement_init.json
   component_images/
   component_glbs/
   iterations/<NNN>/
-    assembly.json                # Layout IR
+    assembly.json
     assembled.blend
     render_views.json
     renders/
-    critic.json                  # Critique IR
+    world_dims.json
+    critic.json
   robot.usda
   robot_prim_map.json
   textures/

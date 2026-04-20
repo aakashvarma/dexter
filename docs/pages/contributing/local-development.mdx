@@ -46,12 +46,9 @@ python3 tool_scripts/validate_json.py \
   --schema schemas/parts.schema.json \
   --data .intermediate/dishwasher/001/parts.json
 
-# Placement hints
-python3 tool_scripts/compute_placement_scales.py \
-  --parts  .intermediate/dishwasher/001/parts.json \
-  --dims   .intermediate/dishwasher/001/component_dims.json \
-  --output /tmp/placement_hints.json \
-  --root-world-dims 0.60 0.60 0.85
+# Placement init
+python3 tool_scripts/initialize_placement.py \
+  --run-dir .intermediate/dishwasher/001
 ```
 
 ### Blender scripts
@@ -65,12 +62,13 @@ blender --background --python tool_scripts/blender_assemble.py -- \
 blender /tmp/test_assembled.blend
 ```
 
-### Image generation (costs API credits)
+### Component generation (costs API credits)
 
 ```bash
 export OPENAI_API_KEY=sk-...
-python3 tool_scripts/openai_imagegen.py \
-  --config .intermediate/dishwasher/001/openai_imagegen.json
+export FAL_KEY=...
+python3 tool_scripts/generate_components.py \
+  --run-dir .intermediate/dishwasher/001
 ```
 
 ## Developing agent prompts
@@ -143,7 +141,7 @@ blender --background --python tool_scripts/blender_render_views.py -- \
 
 ### Bring your own assembly
 
-Write `assembly.json` by hand or with `place_assets_to_assembly.py`, validate, then assemble:
+Write `assembly.json` by hand, validate, then assemble:
 
 ```bash
 python3 tool_scripts/validate_json.py \
@@ -155,7 +153,7 @@ python3 tool_scripts/validate_json.py \
 
 | Problem | Debug approach |
 |---------|---------------|
-| Wrong scale | Compare `child_scale` in hints vs assembly; compute world size manually |
+| Wrong scale | Compare `placement_init.json` child_scale vs assembly; compute world size manually |
 | Wrong position | Open `assembled.blend`, check pivot empties |
 | Schema failure | Run `validate_json.py` directly, read error paths |
 | Agent ignores instructions | Check prompt file path in `opencode.json`; verify permissions |

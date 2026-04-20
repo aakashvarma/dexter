@@ -25,6 +25,7 @@ python3 tool_scripts/validate_json.py --schema schemas/<name>.schema.json --data
 ```
 
 Follow existing conventions:
+
 - Single job, single artifact
 - Validate after writing
 - No communication with other subagents
@@ -54,7 +55,7 @@ Follow existing conventions:
 }
 ```
 
-If the agent needs to run a specific script, allow only that script in bash permissions (see `imagegen` → `openai_imagegen.py`).
+If the agent needs to run a specific script, allow only that script in bash permissions.
 
 ### 3. Create a JSON Schema
 
@@ -63,6 +64,7 @@ Add `schemas/<name>.schema.json` with `additionalProperties: false` on all objec
 ### 4. Update the orchestrator prompt
 
 Edit `.opencode/agents/orchestrator.md` to:
+
 - Add the step in the correct position
 - Specify inputs passed to the subagent (Task tool)
 - Specify output path and skip conditions
@@ -79,11 +81,13 @@ Add the step to the pipeline order section so `opencode /init` stays accurate.
 ### 1. Write the script
 
 Place in `tool_scripts/`. Include a module docstring with:
+
 - What it does
 - Run command (with Blender `--` syntax if applicable)
 - JSON config schema (if config-driven)
 
 Follow existing patterns:
+
 - `argparse` for CLI args
 - Config-driven scripts accept `--config <json>`
 - API keys from environment, never from config files
@@ -107,6 +111,7 @@ Broad `python*` / `blender*` patterns already cover new scripts.
 ### 3. Wire into orchestrator prompt
 
 Add step with:
+
 - Config JSON the orchestrator should write (templated from `config.yaml` if needed)
 - Exact bash command
 - Skip condition (which output file to check)
@@ -132,8 +137,9 @@ Wait for their confirmation. Do not proceed on your own.
 ```
 
 Examples in the current pipeline:
+
 - Parts gate → waits before image generation
-- Placement gate → writes `placement.confirmed` before USD export
+- Placement gate → waits for user approval before USD export
 
 ---
 
@@ -157,7 +163,7 @@ Edit `.opencode/agents/critic.md` — scoring guidance, lock criteria, correctio
 
 ### Change placement starting point
 
-Edit `.opencode/agents/placement.md` or `compute_placement_scales.py` for hint computation.
+Edit `initialize_placement.py` or geometry fields in `parts.json` (then delete `placement_init.json` and `iterations/001/assembly.json` to regenerate).
 
 ---
 
@@ -178,7 +184,7 @@ Because each subagent is a discrete node with a defined input/output contract, y
 3. Or point `opencode.json` to a new prompt file
 4. Run a test pipeline and compare outputs
 
-Example: replace the placement agent's model or prompt style while keeping `assembly.json` schema unchanged.
+Example: change critic scoring guidance while keeping `critic.json` schema unchanged.
 
 ---
 

@@ -75,7 +75,7 @@ The orchestrator keeps the **best-scoring** iteration if a later one regresses.
 
 ## image_generation
 
-Templated into `openai_imagegen.json` by the orchestrator before invoking the imagegen subagent.
+Read by `generate_components.py` when generating component PNGs.
 
 | Key | Default | Options |
 |-----|---------|---------|
@@ -86,7 +86,7 @@ Templated into `openai_imagegen.json` by the orchestrator before invoking the im
 
 ## fal
 
-Templated into `fal_image_to_3d.json`.
+Read by `generate_components.py` when generating component GLBs.
 
 | Key | Default | Description |
 |-----|---------|-------------|
@@ -120,10 +120,8 @@ Agent definitions, temperatures, prompt file paths, and permissions.
 
 | Agent | Mode | Writes | Bash allowed |
 |-------|------|--------|--------------|
-| `orchestrator` | primary | `.intermediate/**`, config JSONs | `python*`, `blender*`, `cp`, `mkdir` |
+| `orchestrator` | primary | `.intermediate/**` | `python*`, `blender*`, `cp`, `mkdir` |
 | `analyze` | subagent | `parts.json` | `validate_json.py` only |
-| `imagegen` | subagent | `component_images/` | `openai_imagegen.py` only |
-| `placement` | subagent | `assembly.json` | `validate_json.py` only |
 | `critic` | subagent | `critic.json` | `validate_json.py` only |
 
 Subagent prompts: `.opencode/agents/*.md`

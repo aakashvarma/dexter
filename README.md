@@ -2,7 +2,7 @@
 
 **Dexter** turns a single product photograph into an **articulated 3D asset** — separate part meshes, a kinematic tree, and a USD package loadable in [NVIDIA Isaac Sim](https://developer.nvidia.com/isaac/sim).
 
-An **orchestrator** OpenCode agent drives the pipeline. Four subagents handle reasoning; tool scripts do the deterministic work. Output lands in `.intermediate/<asset>/<NNN>/`; the final deliverable is `robot.usda`.
+An **orchestrator** OpenCode agent drives the pipeline. Two subagents handle reasoning; tool scripts do the deterministic work. Output lands in `.intermediate/<asset>/<NNN>/`; the final deliverable is `robot.usda`.
 
 📖 **[Documentation](docs/README.md)** — requirements, architecture, agents, schemas, sample runs, and developer guide.
 
@@ -13,20 +13,18 @@ Browse locally: `cd docs && npm i && npm run dev` → http://localhost:3000
 ```mermaid
 flowchart TD
     analyze["analyze subagent\nsource.png → parts.json"] --> gate1{"Human gate:\nconfirm parts.json"}
-    gate1 --> prompts["build_component_prompts.py\n→ prompts.json"]
-    prompts --> imagegen["imagegen subagent\n→ component_images/"]
-    imagegen --> fal["fal_image_to_3d.py\n→ component_glbs/"]
-    fal --> measure["blender_measure_glbs.py\n→ component_dims.json"]
-    measure --> hints["compute_placement_scales.py\n→ placement_hints.json"]
-    hints --> place["placement subagent\n→ assembly.json"]
+    gate1 --> components["generate_components.py\n→ component_images/\ncomponent_glbs/\ncomponent_dims.json"]
+    components --> init["initialize_placement.py\n→ placement_init.json\niterations/001/assembly.json"]
 
     subgraph placeLoop ["Placement ↔ Critic loop · iterations/NNN/"]
-        place --> assemble["blender_assemble.py\n→ assembled.blend"]
+        init --> assemble["blender_assemble.py\n→ assembled.blend"]
+        apply["apply_critic.py\n→ assembly.json"] --> assemble
         assemble --> renderplan["render_views.json"]
         renderplan --> render["blender_render_views.py\n→ renders/"]
-        render --> critique["critic subagent\n→ critic.json"]
+        render --> worlddims["compute_world_dims.py\n→ world_dims.json"]
+        worlddims --> critique["critic subagent\n→ critic.json"]
         critique --> decide{"Stop?"}
-        decide -->|no| place
+        decide -->|no| apply
     end
 
     decide -->|yes, best B| gate2{"Human gate:\nconfirm placement"}
@@ -51,7 +49,7 @@ pip install -r requirements.txt
 
 # 3. API keys
 export OPENAI_API_KEY=...   # component PNGs (generate_components.py)
-export FAL_KEY=...          # image-to-3D GLBs (fal_image_to_3d.py)
+export FAL_KEY=...          # image-to-3D GLBs (generate_components.py)
 # blender must be on PATH (or set paths.blender_binary in config.yaml)
 
 # 4. Initialise project (first time)

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "critic",
-  "description": "Critic score and structured feedback consumed by the placement agent.",
+  "description": "Critic score and structured feedback consumed by apply_critic.py.",
   "type": "object",
   "additionalProperties": false,
   "required": ["iteration", "score", "pass", "summary", "issues", "per_view_notes"],
@@ -38,7 +38,7 @@
           },
           "locked": {
             "type": "boolean",
-            "description": "True only if placement, scale (dimensions vs source), and collision-free contact are all correct; placement must not change this component."
+            "description": "True only if scale, position, and orientation are all correct; apply_critic.py must not change this component."
           },
           "problem": {
             "type": "string",
@@ -62,9 +62,11 @@
             "description": "Suggested location change [dx, dy, dz]."
           },
           "suggested_scale_factor": {
-            "type": "number",
-            "exclusiveMinimum": 0,
-            "description": "Suggested multiplicative scale change."
+            "oneOf": [
+              {"type": "number", "exclusiveMinimum": 0},
+              {"type": "array", "items": {"type": "number", "exclusiveMinimum": 0}, "minItems": 3, "maxItems": 3}
+            ],
+            "description": "Suggested multiplicative scale change: uniform scalar OR [sx, sy, sz] per-axis array."
           },
           "suggested_rotation_delta": {
             "type": "array",

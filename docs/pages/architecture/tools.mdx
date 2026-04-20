@@ -1,18 +1,15 @@
 # Tool Scripts
 
-Not everything in Dexter needs an AI agent. A lot of the work — calling an image API, converting a PNG to a 3D mesh, measuring a file, building a Blender scene — is fully deterministic. For all of that, Dexter uses plain Python and Blender scripts.
+Not everything in Dexter needs an AI agent. Calling image APIs, converting PNGs to 3D meshes, measuring files, building Blender scenes, and applying critic corrections are fully deterministic. For all of that, Dexter uses plain Python and Blender scripts.
 
-These live in `tool_scripts/`. The orchestrator runs them via bash as needed. Each script does one thing, takes its inputs from command-line flags or a small config file, and writes its output to a predictable location. API keys always come from environment variables — never from config files.
-
-Here is a quick map of all the scripts and what they exchange:
+These live in `tool_scripts/`. The orchestrator runs them via bash as needed. API keys always come from environment variables — never from config files.
 
 | Script | What it does | Key input → output |
 |--------|-------------|-------------------|
-| `build_component_prompts.py` | Turns part descriptions into image prompts | `parts.json` → `prompts.json` |
-| `openai_imagegen.py` | Generates one PNG per part | `prompts.json` → `component_images/` |
-| `fal_image_to_3d.py` | Converts PNGs to 3D meshes | `component_images/` → `component_glbs/` |
-| `blender_measure_glbs.py` | Measures raw mesh dimensions | `component_glbs/` → `component_dims.json` |
-| `compute_placement_scales.py` | Pre-computes scales and poses | `parts.json` + dims → `placement_hints.json` |
+| `generate_components.py` | PNGs, GLBs, and dims for all parts | `parts.json` + `source.png` → `component_images/`, `component_glbs/`, `component_dims.json` |
+| `initialize_placement.py` | Pre-computes scales and first layout | `parts.json` + dims → `placement_init.json`, `iterations/001/assembly.json` |
+| `apply_critic.py` | Applies critic corrections to prior layout | `assembly.json` + `critic.json` → next `assembly.json` |
+| `compute_world_dims.py` | Per-part world size, centre, bbox, parent scale | `assembly.json` + dims → `world_dims.json` |
 | `blender_assemble.py` | Builds a Blender scene from the layout | `assembly.json` → `assembled.blend` |
 | `blender_render_views.py` | Renders four diagnostic views | `assembled.blend` → `renders/*.png` |
 | `blender_export_usd.py` | Exports the final USD asset | `assembled.blend` → `robot.usda` |
@@ -20,117 +17,82 @@ Here is a quick map of all the scripts and what they exchange:
 
 ---
 
-## build_component_prompts.py
+## generate_components.py
 
-After the parts list is approved, the pipeline needs image generation prompts. This script creates them.
-
-It reads the `description` field from each part in `parts.json` and writes `prompts.json` — one entry per part. Each prompt asks for that part alone on a white background. The orchestrator runs this automatically after you confirm the parts, so you rarely need to call it by hand.
+Runs after the parts list is approved. Reads `config.yaml` and `parts.json`, generates one PNG per part via OpenAI, one GLB per part via fal.ai, and measures each GLB with Blender into `component_dims.json`. Skips parts whose outputs already exist.
 
 ```bash
-python3 tool_scripts/build_component_prompts.py \
-  --config .intermediate/dishwasher/001/build_component_prompts.json
+python3 tool_scripts/generate_components.py --run-dir .intermediate/dishwasher/001
+```
+
+Requires `OPENAI_API_KEY` and `FAL_KEY`.
+
+---
+
+## initialize_placement.py
+
+Combines geometry hints from `parts.json` with measured mesh sizes from `component_dims.json` to produce scale factors and poses for every part. Writes `placement_init.json` and the first `iterations/001/assembly.json`.
+
+```bash
+python3 tool_scripts/initialize_placement.py --run-dir .intermediate/dishwasher/001
 ```
 
 ---
 
-## openai_imagegen.py
+## apply_critic.py
 
-This script is the imagegen agent's only tool. It takes the prompts and produces the images.
-
-For every part in `prompts.json`, it calls OpenAI's `images.edit()` endpoint with your source photo attached as reference. That reference matters — it keeps the model anchored to your specific product's style and colour rather than inventing something generic. Each result is saved as `component_images/<part>.png`.
-
-If a PNG already exists for a part, the script skips it. So if one image came out wrong and you delete it, you can re-run and only that one gets regenerated.
+From iteration 002 onward, applies critic corrections deterministically: adds position deltas, multiplies scale, adds rotation deltas. Skips `locked` components.
 
 ```bash
-export OPENAI_API_KEY=sk-...
-python3 tool_scripts/openai_imagegen.py \
-  --config .intermediate/dishwasher/001/openai_imagegen.json
+python3 tool_scripts/apply_critic.py \
+  --prev-assembly iterations/001/assembly.json \
+  --critic        iterations/001/critic.json \
+  --output        iterations/002/assembly.json
 ```
 
 ---
 
-## fal_image_to_3d.py
+## compute_world_dims.py
 
-This script turns each component image into a 3D mesh.
-
-It uploads each PNG to fal.ai, calls the Hunyuan 3D model, and downloads the resulting `.glb` into `component_glbs/`. The meshes are single-view 3D reconstructions — they will not be geometrically perfect, but they are good enough for placement and rendering. Like the image script, this one skips parts that already have a `.glb`, making partial re-runs cheap.
+Computes per-part world dimensions from `assembly.json` and raw GLB dims. Output feeds the critic so it can judge scale and position without recomputing transforms.
 
 ```bash
-export FAL_KEY=...
-python3 tool_scripts/fal_image_to_3d.py \
-  --config .intermediate/dishwasher/001/fal_image_to_3d.json
-```
-
----
-
-## blender_measure_glbs.py
-
-Before placing the meshes, you need to know how big they actually are. This script finds out.
-
-Blender opens each GLB in `component_glbs/` and records the bounding box — width, depth, height, and the centre point. The results go into `component_dims.json`. These are the raw mesh sizes with no scaling applied. The placement hints script and placement agent both rely on these numbers to reason about real-world proportions.
-
-```bash
-blender --background --python tool_scripts/blender_measure_glbs.py -- \
-  --glbs-dir .intermediate/dishwasher/001/component_glbs \
-  --output .intermediate/dishwasher/001/component_dims.json
-```
-
----
-
-## compute_placement_scales.py
-
-This script does the pre-computation that makes the first placement attempt reasonable rather than random.
-
-It takes the geometry hints from `parts.json` (things like "the door is about 60% the height of the cabinet") and the actual measured mesh sizes from `component_dims.json`, then works out scale factors and open/closed poses for every part. You give it the real-world size of the root part in metres — for a dishwasher that might be 60 cm × 60 cm × 85 cm — and it derives the right scale for everything in the kinematic tree from there.
-
-The output `placement_hints.json` goes straight into the first placement iteration. This is far more reliable than asking the placement agent to guess dimensions from scratch.
-
-```bash
-python3 tool_scripts/compute_placement_scales.py \
-  --parts  .intermediate/dishwasher/001/parts.json \
-  --dims   .intermediate/dishwasher/001/component_dims.json \
-  --output .intermediate/dishwasher/001/placement_hints.json \
-  --root-world-dims 0.60 0.60 0.85 \
-  --open-angle-deg 90 \
-  --pullout-fraction 0.5
+python3 tool_scripts/compute_world_dims.py \
+  --assembly iterations/001/assembly.json \
+  --dims     component_dims.json \
+  --output   iterations/001/world_dims.json
 ```
 
 ---
 
 ## blender_assemble.py
 
-Once placement writes `assembly.json`, this script turns it into a real Blender scene.
-
-It imports every GLB mentioned in the layout file, applies the transforms — position, rotation, scale — and builds the parent-child hierarchy. The result is saved as `assembled.blend` inside the current iteration folder. This is the file the render script uses, and the file that gets exported to USD at the end. If you want to inspect the assembly manually, just open it in Blender.
+Imports every GLB in `assembly.json`, applies transforms, and builds the parent-child hierarchy as `assembled.blend`.
 
 ```bash
 blender --background --python tool_scripts/blender_assemble.py -- \
-  --layout .intermediate/dishwasher/001/iterations/005/assembly.json \
-  --output .intermediate/dishwasher/001/iterations/005/assembled.blend
+  --layout iterations/001/assembly.json \
+  --output iterations/001/assembled.blend
 ```
 
 ---
 
 ## blender_render_views.py
 
-The critic agent needs to see the assembly before it can critique it. This script produces those views.
-
-It reads `render_views.json` (written by the orchestrator) which defines four cameras: front, top, left, and isometric. For each one it auto-frames the scene along the given direction, sets up lighting, and renders a PNG with Cycles. The four images land in `renders/` and go directly to the critic.
+Reads `render_views.json` (written by the orchestrator) and renders four cameras: front, top, left, and isometric.
 
 ```bash
 blender --background --python tool_scripts/blender_render_views.py -- \
-  --blend iterations/005/assembled.blend \
-  --cameras iterations/005/render_views.json \
-  --output-dir iterations/005/renders/
+  --blend iterations/001/assembled.blend \
+  --cameras iterations/001/render_views.json \
+  --output-dir iterations/001/renders/
 ```
 
 ---
 
 ## blender_export_usd.py
 
-This is the last step of the pipeline. Once you approve a placement, the orchestrator runs this script on the winning iteration's Blender scene.
-
-It exports `robot.usda` with Z-up coordinates in metres — the convention Isaac Sim expects. Material textures get extracted and saved in `textures/` next to the USD so simulator material paths resolve correctly. A `robot_prim_map.json` file captures the mapping from every Blender object name to its USD prim path, which is useful if you want to script further changes downstream.
+Exports the approved `assembled.blend` to `robot.usda` with textures in `textures/` and a `robot_prim_map.json` mapping Blender object names to USD prim paths.
 
 ```bash
 blender --background --python tool_scripts/blender_export_usd.py -- \
@@ -143,24 +105,22 @@ blender --background --python tool_scripts/blender_export_usd.py -- \
 
 ## validate_json.py
 
-Every time a subagent writes a JSON file, the orchestrator immediately checks it against the corresponding JSON Schema. This script handles that check.
-
-If the file is valid, the pipeline moves on. If not, the orchestrator feeds the validation error back to the same subagent and asks it to try again — up to a configurable number of retries. This catches missing fields, wrong types, and structural mistakes before they cause confusing failures deeper in the pipeline.
+Checks subagent and orchestrator JSON output against the corresponding schema.
 
 ```bash
 python3 tool_scripts/validate_json.py \
   --schema schemas/assembly.schema.json \
-  --data .intermediate/dishwasher/001/iterations/005/assembly.json
+  --data .intermediate/dishwasher/001/iterations/001/assembly.json
 ```
 
 ---
 
 ## A note on Blender scripts
 
-All four Blender scripts follow the same invocation pattern. Arguments must come after `--`, otherwise Blender swallows them:
+All Blender scripts follow the same invocation pattern. Arguments must come after `--`:
 
 ```bash
 blender --background --python tool_scripts/<script>.py -- --your-args here
 ```
 
-The `blender` binary path defaults to whatever is on your `PATH`, but you can override it in `config.yaml` under `paths.blender_binary` if needed.
+The `blender` binary path defaults to whatever is on your `PATH`, but you can override it in `config.yaml` under `paths.blender_binary`.

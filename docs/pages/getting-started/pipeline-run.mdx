@@ -4,25 +4,23 @@ This page is the end-to-end guide for running Dexter. It covers the agentic loop
 
 ## The agentic loop
 
-Dexter has no standalone Python driver. The **orchestrator** OpenCode agent sequences four subagents and deterministic tool scripts, pausing at two human gates.
+Dexter has no standalone Python driver. The **orchestrator** OpenCode agent sequences two subagents and deterministic tool scripts, pausing at two human gates.
 
 ```mermaid
 flowchart TD
     analyze["analyze subagent\nsource.png → parts.json"] --> gate1{"Human gate 1:\nconfirm parts.json"}
-    gate1 --> prompts["build_component_prompts.py\n→ prompts.json"]
-    prompts --> imagegen["imagegen subagent\n→ component_images/"]
-    imagegen --> fal["fal_image_to_3d.py\n→ component_glbs/"]
-    fal --> measure["blender_measure_glbs.py\n→ component_dims.json"]
-    measure --> hints["compute_placement_scales.py\n→ placement_hints.json"]
-    hints --> place["placement subagent\n→ assembly.json"]
+    gate1 --> components["generate_components.py\n→ component_images/\ncomponent_glbs/\ncomponent_dims.json"]
+    components --> init["initialize_placement.py\n→ placement_init.json\niterations/001/assembly.json"]
 
     subgraph placeLoop ["Placement ↔ Critic loop · iterations/NNN/"]
-        place --> assemble["blender_assemble.py\n→ assembled.blend"]
+        init --> assemble["blender_assemble.py\n→ assembled.blend"]
+        apply["apply_critic.py\n→ assembly.json"] --> assemble
         assemble --> renderplan["render_views.json"]
         renderplan --> render["blender_render_views.py\n→ renders/"]
-        render --> critique["critic subagent\n→ critic.json"]
+        render --> worlddims["compute_world_dims.py\n→ world_dims.json"]
+        worlddims --> critique["critic subagent\n→ critic.json"]
         critique --> decide{"Stop?"}
-        decide -->|no| place
+        decide -->|no| apply
     end
 
     decide -->|yes, best B| gate2{"Human gate 2:\nconfirm placement"}
@@ -54,14 +52,8 @@ Every run writes to `.intermediate/<asset>/<NNN>/`. The tree is gitignored and i
 ├── source.png                         # copied input image
 │
 ├── parts.json                         # Parts IR (analyze agent)
-├── prompts.json                       # per-part image prompts
 ├── component_dims.json                # raw GLB bounding boxes
-├── placement_hints.json               # pre-computed scales and poses
-├── placement.confirmed                # human-approved iteration id (e.g. "006")
-│
-├── build_component_prompts.json       # orchestrator-written config
-├── openai_imagegen.json               # orchestrator-written config
-├── fal_image_to_3d.json               # orchestrator-written config
+├── placement_init.json                # pre-computed scales and poses
 │
 ├── component_images/                  # isolated component PNGs
 │   ├── dishwasher_cabinet.png
@@ -81,6 +73,7 @@ Every run writes to `.intermediate/<asset>/<NNN>/`. The tree is gitignored and i
 │   │   ├── assembled.blend            # Blender scene
 │   │   ├── render_views.json          # camera plan (orchestrator)
 │   │   ├── renders/                   # front, top, left, isometric PNGs
+│   │   ├── world_dims.json            # per-part world dimensions
 │   │   └── critic.json                # Critique IR
 │   ├── 002/ … 006/
 │   └── <best B>/
@@ -103,19 +96,18 @@ Every run writes to `.intermediate/<asset>/<NNN>/`. The tree is gitignored and i
 
 | Artifact | Produced in step | Consumed by |
 |----------|-------------------|-------------|
-| `source.png` | Run start (copy) | analyze, imagegen |
-| `parts.json` | Step 1 | prompts, placement hints, placement |
-| `prompts.json` | Step 2 | imagegen |
-| `component_images/` | Step 3 | fal_image_to_3d |
-| `component_glbs/` | Step 4 | blender_measure_glbs |
-| `component_dims.json` | Step 5 | placement hints, placement, critic |
-| `placement_hints.json` | Step 6 | placement (iteration 1) |
-| `iterations/N/assembly.json` | Step 7 (each loop) | blender_assemble, critic |
-| `iterations/N/assembled.blend` | Step 7 | blender_render_views, USD export |
-| `iterations/N/renders/` | Step 7 | critic |
-| `iterations/N/critic.json` | Step 7 | placement (iteration 2+) |
-| `placement.confirmed` | Human gate 2 | USD export |
-| `robot.usda` | Step 8 | Isaac Sim |
+| `source.png` | Run start (copy) | analyze, generate_components |
+| `parts.json` | Step 1 | generate_components, initialize_placement |
+| `component_images/` | Step 2 | generate_components (fal step) |
+| `component_glbs/` | Step 2 | blender_assemble |
+| `component_dims.json` | Step 2 | initialize_placement, compute_world_dims |
+| `placement_init.json` | Step 3 | iteration 001 assembly |
+| `iterations/N/assembly.json` | Step 3–4 | blender_assemble, compute_world_dims |
+| `iterations/N/world_dims.json` | Step 4 | critic |
+| `iterations/N/assembled.blend` | Step 4 | blender_render_views, USD export |
+| `iterations/N/renders/` | Step 4 | critic |
+| `iterations/N/critic.json` | Step 4 | apply_critic (iteration 2+) |
+| `robot.usda` | Step 5 | Isaac Sim |
 
 ---
 
@@ -173,15 +165,14 @@ opencode run --agent orchestrator -- "run 3 more placement iterations for .inter
 ```bash
 RUN=.intermediate/dishwasher/001
 
-ls $RUN/parts.json $RUN/component_glbs/ $RUN/placement_hints.json
+ls $RUN/parts.json $RUN/component_glbs/ $RUN/placement_init.json
 ls $RUN/iterations/
 
 # Latest critic score
 cat $RUN/iterations/005/critic.json | python3 -c \
   "import json,sys; d=json.load(sys.stdin); print(f'Iter {d[\"iteration\"]}: {d[\"score\"]} — {d[\"summary\"]}')"
 
-cat $RUN/placement.confirmed 2>/dev/null || echo "Placement not yet approved"
-ls $RUN/robot.usda 2>/dev/null || echo "USD not yet exported"
+ls $RUN/robot.usda 2>/dev/null || echo "USD not yet exported (placement gate not passed)"
 ```
 
 ---
@@ -243,34 +234,19 @@ Example excerpt from `parts.json`:
 
 ---
 
-### Step 2 — Build prompts (tool script)
+### Step 2 — Generate components (tool script)
 
-After you approve the parts, this script turns each part's description into an image prompt. The prompts ask for that part alone on a white background, which makes the next step easier for the image model.
+After you approve the parts, `generate_components.py` runs OpenAI once per part (using `source.png` as reference), fal.ai for GLBs, and Blender to measure each mesh.
 
-**Who:** orchestrator → `build_component_prompts.py`  
+**Who:** orchestrator → `generate_components.py`  
+**Requires:** `OPENAI_API_KEY`, `FAL_KEY`  
 **Outputs:**
 
 | File | Description |
 |------|-------------|
-| `build_component_prompts.json` | Orchestrator-written config |
-| `prompts.json` | One image-generation prompt per part |
-
-Each prompt tells the model to isolate one part from `source.png` on a white background. Descriptions from `parts.json` are copied into the prompts.
-
----
-
-### Step 3 — Component images (imagegen agent)
-
-The imagegen agent runs OpenAI once per part. Each call uses `source.png` as reference so the isolated images still look like the same product. You get one PNG per part in `component_images/`.
-
-**Who:** `imagegen` subagent → `openai_imagegen.py`  
-**Requires:** `OPENAI_API_KEY`  
-**Outputs:**
-
-| File | Description |
-|------|-------------|
-| `openai_imagegen.json` | Orchestrator-written config |
 | `component_images/<part>.png` | One isolated PNG per part |
+| `component_glbs/<part>.glb` | One GLB mesh per part |
+| `component_dims.json` | Raw bounding box per GLB |
 
 ![Four part renders on white background](/assets/images/dexter/part_renders.png)
 
@@ -285,65 +261,37 @@ Uses OpenAI `images.edit()` with `source.png` attached as visual reference for e
 
 ---
 
-### Step 4 — Image-to-3D meshes (tool script)
-
-Each component PNG is sent to fal.ai and comes back as a 3D mesh. The meshes are rough but good enough for layout and rendering. One GLB is saved per part.
-
-**Who:** orchestrator → `fal_image_to_3d.py`  
-**Requires:** `FAL_KEY`  
-**Outputs:**
-
-| File | Description |
-|------|-------------|
-| `fal_image_to_3d.json` | Orchestrator-written config |
-| `component_glbs/<part>.glb` | One GLB mesh per part |
-
 <video controls width="100%">
   <source src="/assets/video/dexter/component_glbs.mp4" type="video/mp4" />
 </video>
 
 *Per-part meshes after fal.ai Hunyuan 3D conversion.*
 
-The script skips any image that already has a matching `.glb`, so re-running only fills in missing meshes.
+The script skips parts whose PNG, GLB, or dims already exist, so re-running only fills in missing assets.
 
 ---
 
-### Step 5 — Measure GLBs (Blender script)
+### Step 3 — Placement init (tool script)
 
-Blender opens each downloaded mesh and records its bounding box. These raw sizes tell the placement agents how big each GLB is before any scaling is applied.
+`initialize_placement.py` combines geometry from `parts.json` with measured mesh sizes to write `placement_init.json` and `iterations/001/assembly.json`.
 
-**Who:** orchestrator → `blender_measure_glbs.py`  
+**Who:** orchestrator → `initialize_placement.py`  
 **Outputs:**
 
 | File | Description |
 |------|-------------|
-| `component_dims.json` | Raw bounding box per GLB (`size`, `center`, `min`, `max`) |
+| `placement_init.json` | `root_scale`, per-part `child_scale`, closed/open poses |
+| `iterations/001/assembly.json` | First layout IR |
 
-These are **raw** sizes before any `scale` from `assembly.json`. The placement and critic agents use them to compute world-space dimensions.
-
----
-
-### Step 6 — Placement hints (tool script)
-
-This script combines part geometry from `parts.json` with measured mesh sizes to suggest scales and poses for the first layout. The orchestrator passes real-world cabinet dimensions so the dishwasher ends up roughly the right size in metres.
-
-**Who:** orchestrator → `compute_placement_scales.py`  
-**Mandatory** before the first placement iteration.  
-**Outputs:**
-
-| File | Description |
-|------|-------------|
-| `placement_hints.json` | `root_scale`, per-part `child_scale`, closed/open poses |
-
-The orchestrator estimated real-world dims `0.60 × 0.60 × 0.85` m for the dishwasher cabinet and passed `--open-angle-deg 90` for the drop-down door. All values are derived from `parts.json` geometry fields — not guessed by the placement agent.
+Real-world dims come from `world_dims` in `parts.json` (e.g. `0.60 × 0.60 × 0.85` m for the dishwasher cabinet). All values are derived from geometry fields — no LLM guessing.
 
 ---
 
-### Step 7 — Placement ↔ critic loop
+### Step 4 — Placement ↔ critic loop
 
-This is stages 4 and 5 together. Placement writes where each mesh goes. Blender assembles the scene and renders four views. The critic scores the result against the source photo and suggests fixes. Placement runs again with those fixes until the loop stops. The orchestrator keeps the best-scoring iteration.
+Blender assembles and renders four views. `compute_world_dims.py` pre-computes per-part world dimensions. The critic scores the result and suggests fixes. `apply_critic.py` applies those fixes deterministically on the next iteration. The orchestrator keeps the best-scoring iteration.
 
-**Who:** `placement` + `critic` subagents; `blender_assemble.py`, `blender_render_views.py`  
+**Who:** `critic` subagent; `apply_critic.py`, `blender_assemble.py`, `blender_render_views.py`, `compute_world_dims.py`  
 **Outputs per iteration** (`iterations/NNN/`):
 
 | File | Description |
@@ -359,7 +307,7 @@ This is stages 4 and 5 together. Placement writes where each mesh goes. Blender 
 
 #### Iteration 1 — score 72
 
-First placement using `placement_hints.json`. Cabinet and door were reasonable; both racks were **offset laterally** and protruded through the side walls.
+First layout from `initialize_placement.py`. Cabinet and door were reasonable; both racks were **offset laterally** and protruded through the side walls.
 
 ![Iteration 1 isometric render](/assets/images/dexter/run/iter_001_isometric.png)
 
@@ -376,7 +324,7 @@ Critic summary: *"Dishwasher body and door are close, but both racks are lateral
 
 #### Iteration 6 — score 86 (best in this run)
 
-After five rounds of placement and critique, iteration 6 was the best layout. Placement applied the upper-rack correction from iteration 5 — the rack sits further back in the cavity, matching the source photo more closely. Cabinet, door, and lower rack stayed locked.
+After five rounds of critique and `apply_critic.py` refinements, iteration 6 was the best layout. The upper-rack correction from iteration 5 was applied — the rack sits further back in the cavity, matching the source photo more closely. Cabinet, door, and lower rack stayed locked.
 
 ![Iteration 6 isometric render](/assets/images/dexter/run/iter_006_isometric.png)
 
@@ -395,20 +343,15 @@ After five rounds of placement and critique, iteration 6 was the best layout. Pl
 
 The orchestrator tracks the **best** iteration by score. Iteration 6 scored highest at **86**, so that layout was kept for approval and export.
 
-**Iteration 2+ behavior:** placement receives the previous best `assembly.json` + `critic.json` and applies only the critic's corrections. Components marked `locked: true` are not changed.
+**Iteration 2+ behavior:** `apply_critic.py` reads the previous best `assembly.json` + `critic.json` and applies only the critic's corrections. Components marked `locked: true` are not changed.
 
 ---
 
 ### Step 8 — Human gate 2 (placement approval)
 
-The loop has finished. You review the best iteration's renders and decide whether to approve, pick a different iteration, or ask for more rounds. Approval is recorded in `placement.confirmed`.
+The loop has finished. You review the best iteration's renders and decide whether to approve, pick a different iteration, or ask for more rounds.
 
 **Who:** you  
-**Output:**
-
-| File | Description |
-|------|-------------|
-| `placement.confirmed` | Single line: approved iteration id, e.g. `006` |
 
 Review the best iteration's `renders/`, `critic.json`, and open `assembled.blend` in Blender if needed. Tell the orchestrator to approve, pick a different iteration, or request more placement rounds.
 
@@ -419,7 +362,7 @@ Review the best iteration's `renders/`, `critic.json`, and open `assembled.blend
 With placement approved, Blender exports the scene to USD. Textures are extracted alongside the file so Isaac Sim can load materials correctly. This is the final deliverable.
 
 **Who:** orchestrator → `blender_export_usd.py`  
-**Requires:** `placement.confirmed`  
+**Requires:** your approval at human gate 2  
 **Outputs:**
 
 | File | Description |

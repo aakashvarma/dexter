@@ -53,12 +53,10 @@ python3 -c "import fal_client, openai, jsonschema, yaml; print('OK')"
 ### Wrong hinge side
 
 **Symptom:** Door rotates around wrong edge
-**Fix:** Edit `hinge_side` in `parts.json`. Regenerate `placement_hints.json`:
+**Fix:** Edit `hinge_side` in `parts.json`. Delete `placement_init.json` and `iterations/001/assembly.json`, then rerun placement init:
 
 ```bash
-python3 tool_scripts/compute_placement_scales.py \
-  --parts parts.json --dims component_dims.json \
-  --output placement_hints.json --root-world-dims 0.60 0.60 0.85
+python3 tool_scripts/initialize_placement.py --run-dir .intermediate/dishwasher/001
 ```
 
 ---
@@ -68,15 +66,15 @@ python3 tool_scripts/compute_placement_scales.py \
 ### Wrong part isolated in PNG
 
 **Symptom:** PNG shows wrong component or multiple parts
-**Fix:** Improve part `description` in `parts.json`. Delete `prompts.json` and `component_images/`, resume run.
+**Fix:** Improve part `description` in `parts.json`. Delete affected PNGs in `component_images/` (and corresponding GLBs if needed), resume run.
 
 ### OpenAI rate limit (429)
 
-**Fix:** Wait and re-run. `openai_imagegen.py` skips existing PNGs.
+**Fix:** Wait and re-run. `generate_components.py` skips existing PNGs and GLBs.
 
 ### Images don't match source style
 
-**Fix:** Verify `reference_image_path` in `openai_imagegen.json` points to `source.png`.
+**Fix:** Verify `<run_dir>/source.png` exists — `generate_components.py` uses it as the reference image for every part.
 
 ---
 
@@ -95,6 +93,7 @@ opencode run --agent orchestrator -- "resume .intermediate/dishwasher/001/"
 ### Bad mesh quality (lumpy, incomplete)
 
 **Fix:**
+
 1. Regenerate source PNG with better description
 2. Increase `face_count` in `config.yaml` (e.g. 80000)
 3. Re-run fal step only
@@ -102,7 +101,7 @@ opencode run --agent orchestrator -- "resume .intermediate/dishwasher/001/"
 ### GLB size seems wrong
 
 **Symptom:** Part appears much larger/smaller than expected
-**Note:** Raw GLB sizes vary — this is normal. Placement agent corrects via `child_scale`.
+**Note:** Raw GLB sizes vary — this is normal. `initialize_placement.py` and the critic loop correct via `child_scale`.
 
 ---
 
@@ -112,9 +111,10 @@ opencode run --agent orchestrator -- "resume .intermediate/dishwasher/001/"
 
 **Symptom:** Door 2× too wide, rack too small
 **Fix:**
-1. Check `placement_hints.json` `child_scale` values
-2. Verify `size_fraction` in `parts.json`
-3. Regenerate hints with correct `--root-world-dims`
+
+1. Check `placement_init.json` `child_scale` values
+2. Verify `size_fraction` and `world_dims` in `parts.json`
+3. Delete `placement_init.json` and rerun `initialize_placement.py`
 
 ### Mesh collisions (overlap)
 
@@ -125,14 +125,16 @@ opencode run --agent orchestrator -- "resume .intermediate/dishwasher/001/"
 
 **Symptom:** Door closed when source shows open
 **Fix:**
-1. Check `open_pose` in `placement_hints.json`
-2. Adjust `--open-angle-deg` when regenerating hints
+
+1. Check `open_angle_deg` in `parts.json`
+2. Delete `placement_init.json` and `iterations/001/assembly.json`, rerun `initialize_placement.py`
 3. Let critic correct via `suggested_rotation_delta`
 
 ### Score plateaus below threshold
 
 **Symptom:** Score stuck at 70–75 after many iterations
 **Fix:**
+
 1. Check if critic locks components too early
 2. Edit `parts.json` geometry hints, regenerate hints
 3. Increase `max_loops` in `config.yaml`
@@ -171,7 +173,7 @@ render:
 **Fix:** Complete placement human gate, or manually write:
 
 ```bash
-echo "006" > .intermediate/dishwasher/001/placement.confirmed
+# Tell the orchestrator to export iteration 006 after reviewing renders
 ```
 
 ### Missing textures in Isaac Sim
@@ -219,7 +221,7 @@ python3 tool_scripts/validate_json.py \
 ```bash
 RUN=.intermediate/dishwasher/001
 ls $RUN/parts.json $RUN/component_glbs/ $RUN/iterations/
-cat $RUN/placement.confirmed 2>/dev/null || echo "No placement approval yet"
+ls $RUN/robot.usda 2>/dev/null || echo "USD not yet exported"
 ls $RUN/robot.usda 2>/dev/null || echo "No USD export yet"
 ```
 

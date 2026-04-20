@@ -1,6 +1,6 @@
 # Agents
 
-Dexter runs inside OpenCode with five agents. One orchestrator runs the whole pipeline. Four subagents each handle a single focused task. They never talk to each other — the orchestrator is the middleman, passing files and context between them.
+Dexter runs inside OpenCode with three agents. One orchestrator runs the whole pipeline. Two subagents each handle a single focused task. They never talk to each other — the orchestrator is the middleman, passing files and context between them.
 
 The agent prompt files live in `.opencode/agents/`. Their permissions and modes are wired up in `opencode.json`.
 
@@ -14,9 +14,7 @@ When you open OpenCode and type a prompt, you are talking to the orchestrator. I
 
 The orchestrator does not do creative work — it coordinates. It checks what already exists in the run directory before doing anything, so interrupted runs can resume cleanly. It calls subagents when it needs judgment. It runs tool scripts when the work is deterministic. It writes the camera plan for each render cycle. It tracks which placement iteration scored highest. It stops the pipeline at the right moments and waits for your input.
 
-There are two moments where the orchestrator hands control back to you. The first is after the parts list is generated, before any 3D work begins. The second is after the placement loop ends, before the USD is exported. At both points you can review, request changes, or give the go-ahead.
-
-Before running some scripts, the orchestrator writes small config files that bundle up the parameters those scripts need. This keeps the scripts themselves simple and testable — they just read a config and run.
+There are two moments where the orchestrator hands control back to you. The first is after the parts list is generated, before any 3D work begins. The second is after the placement loop ends, before the USD is exported.
 
 ---
 
@@ -26,9 +24,7 @@ The analyze agent's job is to look at your source image and describe the object 
 
 It produces `parts.json`. For each moving part it records a name (something specific like `front_door`, not `part_1`), a short description suitable for image generation, which part it attaches to in the hierarchy, and the joint type that connects them. It also adds geometry hints: roughly how large the part is relative to its parent, where it sits, and — for hinged parts — which side the hinge is on, or for sliding parts, which axis they move along.
 
-These details ripple through the entire pipeline. The descriptions become the prompts that generate component images. The geometry hints tell the placement script how to scale things before the first layout attempt. The joint types end up in the exported USD.
-
-Because this file is so foundational, the orchestrator always pauses after analyze finishes and asks you to confirm the result. It is the right time to catch anything off — a missing part, a wrong joint type, an implausible size estimate — before any API money gets spent on generation.
+Because this file is so foundational, the orchestrator always pauses after analyze finishes and asks you to confirm the result.
 
 Here is what a single part entry looks like:
 
@@ -46,37 +42,11 @@ Here is what a single part entry looks like:
 
 ---
 
-## The imagegen agent — one image per part
-
-The imagegen agent's sole job is to produce an isolated, white-background PNG for each part.
-
-It does not call OpenAI directly. It runs `openai_imagegen.py`, which reads the prompts file and makes one `images.edit()` call per part. Every call includes your original source photo as a visual reference, so the style and proportions stay consistent across parts. Results land in `component_images/`.
-
-If a PNG already exists for a part, the script skips that part. This means you can re-run the imagegen stage without redoing parts that came out fine.
-
-You need `OPENAI_API_KEY` set in your environment for this to work.
-
----
-
-## The placement agent — arranging parts in 3D space
-
-The placement agent does the spatial reasoning. It looks at the source image, the part list, the measured mesh dimensions, and a set of pre-computed placement hints, then decides where every mesh belongs in 3D space.
-
-Its output is `assembly.json`, one file per iteration. Each entry in that file describes a part's position and rotation relative to its parent and a scale vector that accounts for the full parent-child chain. These are not approximate values — they need to be precise enough that when Blender builds the scene, the result actually resembles the source photo.
-
-On the first iteration, placement starts from `placement_hints.json`, which was derived from your photo's geometry before any guessing was needed. It also tries to match the pose in the source image — if the door is open, the assembly should show the door open.
-
-From the second iteration onwards, placement receives the previous best layout and the critic's feedback. It applies only the fixes the critic suggested. Parts marked `locked` are skipped. If the changes make the score worse, placement rolls back to the best-known layout and tries a more conservative set of adjustments.
-
----
-
 ## The critic agent — scoring the result
 
-After every placement round, Blender renders four views of the assembled scene — front, top, left, and isometric. The critic agent looks at those renders alongside the source photo and writes an honest evaluation.
+After every placement round, Blender renders four views of the assembled scene — front, top, left, and isometric. The critic agent looks at those renders alongside the source photo and `world_dims.json`, then writes an honest evaluation.
 
-Its output is `critic.json`: an overall score from 0 to 100 and a note for each part. For any part that still needs work, the critic picks one specific fix — nudge it this direction, scale it by this factor, rotate it by this many degrees. Parts that look right get marked `locked`. The placement agent uses all of this on the next round.
-
-The score scale is intentionally coarse. A 90+ means you are mostly done. A 75–89 means one or two things are off but the structure is recognisable. Below 60 means something is structurally wrong — a part is through a wall, or at the wrong scale entirely.
+Its output is `critic.json`: an overall score from 0 to 100 and per-component corrections. For any part that still needs work, the critic provides all applicable fixes together — `suggested_delta`, `suggested_scale_factor`, and `suggested_rotation_delta`. Parts are marked `locked` only when scale, position, and orientation are all correct. `apply_critic.py` applies those corrections deterministically on the next iteration.
 
 | Score | What it means |
 |-------|--------------|
@@ -89,8 +59,8 @@ The score scale is intentionally coarse. A 90+ means you are mostly done. A 75�
 
 ## Keeping things safe and auditable
 
-Every agent can only write files inside `.intermediate/`. The source tree — your prompt files, schemas, tool scripts — is read-only. This means no agent can accidentally overwrite the pipeline's own logic.
+Every agent can only write files inside `.intermediate/`. The source tree — your prompt files, schemas, tool scripts — is read-only.
 
-Subagents also have deliberately narrow tool access. The analyze, placement, and critic agents can only run `validate_json.py`. The imagegen agent can only run `openai_imagegen.py`. They cannot browse the web, call arbitrary scripts, or touch files outside the run directory. If something goes wrong in a subagent, it is contained.
+Subagents have deliberately narrow tool access. The analyze and critic agents can only run `validate_json.py`. They cannot browse the web, call arbitrary scripts, or touch files outside the run directory.
 
-No model names or API keys appear in any agent prompt. Subagents use whichever model you have connected to OpenCode. You can switch models with `/connect` in the TUI.
+No model names or API keys appear in any agent prompt. Subagents use whichever model you have connected to OpenCode.

@@ -18,11 +18,11 @@ python3 tool_scripts/validate_json.py \
 | Schema | Artifact | Written by | When validated |
 |--------|----------|-----------|----------------|
 | `parts.schema.json` | `parts.json` | analyze agent | After analyze step |
-| `assembly.schema.json` | `assembly.json` | placement agent | Each placement iteration |
+| `assembly.schema.json` | `assembly.json` | initialize_placement.py / apply_critic.py | Each iteration |
 | `critic.schema.json` | `critic.json` | critic agent | Each critique |
-| `placement_hints.schema.json` | `placement_hints.json` | compute_placement_scales.py | Before placement |
+| `placement_init.schema.json` | `placement_init.json` | initialize_placement.py | After placement init |
 | `render_views.schema.json` | `render_views.json` | orchestrator | Before rendering |
-| `component_dims.schema.json` | `component_dims.json` | blender_measure_glbs.py | After measurement |
+| `component_dims.schema.json` | `component_dims.json` | generate_components.py | After component generation |
 
 ## Retry policy
 
@@ -40,8 +40,6 @@ Revolute joints require: `hinge_side` (`left`|`right`|`top`|`bottom`).
 
 Prismatic joints require: `slide_axis` (`-y`|`+y`|`-x`|`+x`|`+z`|`-z`).
 
-All objects use `additionalProperties: false`.
-
 ## assembly.schema.json
 
 Top-level: `root`, `robot_name`, `links` (array, min 1).
@@ -50,25 +48,23 @@ Per link — all required: `name`, `parent`, `visual_mesh`, `collision_mesh`, `o
 
 `origin` requires: `xyz` `[x,y,z]`, `rpy_deg` `[rx,ry,rz]` (degrees, XYZ Euler).
 
-Schema description embeds the transform chain formulas for agent reference.
-
 ## critic.schema.json
 
 Required: `iteration` (int ≥1), `score` (0–100), `pass` (bool), `summary`, `issues`, `per_view_notes`.
 
-Per issue — required: `component`, `problem`. Optional: `locked`, `axis`, `direction`, `suggested_delta`, `suggested_scale_factor`, `suggested_rotation_delta`.
+Per issue — required: `component`, `problem`. Optional: `locked`, `suggested_delta`, `suggested_scale_factor` (scalar or `[sx,sy,sz]`), `suggested_rotation_delta`.
 
-## placement_hints.schema.json
+## placement_init.schema.json
 
 Required: `object`, `root_name`, `root_world_dims`, `root_world_center`, `root_scale`, `parts`.
 
-Per part hint: `name`, `joint_type`, `child_scale`, `closed_pose` (with `world_center`, `origin_xyz`, `rpy_deg`). Optional: `open_pose`, `children` (recursive).
+Per part hint: `name`, `joint_type`, `child_scale`, `closed_pose`. Optional: `open_pose`, `children` (recursive).
 
 ## render_views.schema.json
 
 Required: `resolution` `[w,h]`, `samples`, `engine`, `file_format`, `cameras`.
 
-Per camera — required: `name`, `direction` `[x,y,z]`, `output`, `light_energy`, `light_type`. Optional: `margin` (default 1.3).
+Per camera — required: `name`, `direction` `[x,y,z]`, `output`, `light_energy`, `light_type`.
 
 **Do not add `location` or `look_at`** — the render script auto-frames.
 
@@ -78,20 +74,13 @@ Required: `parts` (object map).
 
 Per part: `size`, `center`, `min`, `max` — each `[x,y,z]` arrays.
 
-## Design principles
-
-1. **`additionalProperties: false`** on all objects — strict field enforcement
-2. **Required fields explicit** — missing fields fail immediately
-3. **Descriptions document semantics** — each field explains its pipeline role
-4. **Transform math in schema descriptions** — `assembly.schema.json` embeds formulas
-
 ## Validate a full run
 
 ```bash
 RUN=.intermediate/dishwasher/001
 
 python3 tool_scripts/validate_json.py --schema schemas/parts.schema.json --data $RUN/parts.json
-python3 tool_scripts/validate_json.py --schema schemas/placement_hints.schema.json --data $RUN/placement_hints.json
+python3 tool_scripts/validate_json.py --schema schemas/placement_init.schema.json --data $RUN/placement_init.json
 
 for iter in $RUN/iterations/*/; do
   python3 tool_scripts/validate_json.py --schema schemas/assembly.schema.json --data $iter/assembly.json

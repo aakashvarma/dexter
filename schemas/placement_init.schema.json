@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "placement_init",
-  "description": "Pre-computed scale and placement values produced by initialize_placement.py. Every value is derived from parts.json (world_dims, size_fraction, position_in_parent, hinge_side, slide_axis, open_angle_deg, pullout_fraction). The placement agent should start from these values and only override when the source image clearly contradicts them.",
+  "description": "Pre-computed scale and placement values produced by initialize_placement.py. Every value is derived from parts.json (world_dims, size_fraction, position_in_parent, hinge_side, slide_axis, open_angle_deg, pullout_fraction). Used to build iterations/001/assembly.json.",
   "type": "object",
   "additionalProperties": false,
   "required": ["object", "root_name", "root_world_dims", "root_world_center", "root_scale", "parts"],

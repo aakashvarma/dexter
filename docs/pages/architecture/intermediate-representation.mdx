@@ -6,11 +6,12 @@ Dexter passes data between agents and tools through typed **Intermediate Represe
 
 | IR name | File | Producer | Consumer |
 |---------|------|----------|----------|
-| **Parts IR** | `parts.json` | analyze agent | prompts, placement hints, placement |
-| **Layout IR** | `assembly.json` | placement agent | blender_assemble, critic, USD export |
-| **Critique IR** | `critic.json` | critic agent | placement (iteration 2+), orchestrator |
-| **Placement hints** | `placement_hints.json` | compute_placement_scales.py | placement (iteration 1) |
-| **Component dims** | `component_dims.json` | blender_measure_glbs.py | placement hints, placement, critic |
+| **Parts IR** | `parts.json` | analyze agent | generate_components, initialize_placement |
+| **Layout IR** | `assembly.json` | initialize_placement.py / apply_critic.py | blender_assemble, compute_world_dims, USD export |
+| **Critique IR** | `critic.json` | critic agent | apply_critic.py, orchestrator |
+| **Placement init** | `placement_init.json` | initialize_placement.py | iteration 001 assembly |
+| **World dims** | `world_dims.json` | compute_world_dims.py | critic |
+| **Component dims** | `component_dims.json` | generate_components.py | initialize_placement, compute_world_dims |
 | **Render views** | `render_views.json` | orchestrator | blender_render_views.py |
 
 ## Parts IR (`parts.json`)
@@ -41,6 +42,7 @@ Structured output of the **analyze** subagent: the part list and kinematic tree.
 ```
 
 **Key fields for downstream steps:**
+
 - `name` → file stem for PNGs, GLBs, and assembly links
 - `description` → copied into image generation prompts
 - `size_fraction` + `position_in_parent` → placement hint computation
@@ -50,7 +52,7 @@ Approved by human gate before 3D generation begins.
 
 ## Layout IR (`assembly.json`)
 
-Structured output of the **placement** subagent: position, orientation, and scale for each link.
+Layout IR: position, orientation, and scale for each link. Iteration 001 comes from `initialize_placement.py`; later iterations from `apply_critic.py`.
 
 ```json
 {
@@ -70,6 +72,7 @@ Structured output of the **placement** subagent: position, orientation, and scal
 ```
 
 This single IR drives:
+
 1. **Blender assembly** — visual scene for rendering
 2. **Critic comparison** — world-space dimensions from scale + raw dims
 3. **USD export** — geometry for Isaac Sim
@@ -148,28 +151,9 @@ Corrections are in **parent-local space**:
 origin_delta[axis] = Δworld[axis] / parent_scale[axis]
 ```
 
-## Placement hints (`placement_hints.json`)
+## Placement init (`placement_init.json`)
 
-Pre-computed scales and poses from `compute_placement_scales.py`. Gives the placement agent geometrically correct starting values.
-
-```json
-{
-  "object": "dishwasher",
-  "root_name": "cabinet_body",
-  "root_world_dims": [0.60, 0.60, 0.85],
-  "root_scale": [1.7, 1.6, 1.8],
-  "parts": [
-    {
-      "name": "front_door",
-      "child_scale": [1.25, 0.51, 0.85],
-      "closed_pose": {"origin_xyz": [...], "rpy_deg": [0,0,0]},
-      "open_pose": {"open_origin_xyz": [...], "open_rpy_deg": [45,0,0]}
-    }
-  ]
-}
-```
-
-All values derived from `parts.json` geometry fields — no guessing. If hints look wrong, fix `parts.json` and regenerate.
+Pre-computed scales and poses from `initialize_placement.py`. Used to build `iterations/001/assembly.json`. All values are derived from `parts.json` geometry fields. If init looks wrong, fix `parts.json` and delete `placement_init.json` plus `iterations/001/assembly.json` to regenerate.
 
 ## Component dims (`component_dims.json`)
 
@@ -198,43 +182,14 @@ world_size[axis] = parent_scale[axis] × child_scale[axis] × raw_size[axis]
 
 ```
 source.png
-  → parts.json           (analyze)
-  → prompts.json         (build_component_prompts.py)
-  → component_images/    (openai_imagegen.py)
-  → component_glbs/      (fal_image_to_3d.py)
-  → component_dims.json  (blender_measure_glbs.py)
-  → placement_hints.json (compute_placement_scales.py)
-  → assembly.json        (placement)  ←→ critic.json (critic)
-  → assembled.blend      (blender_assemble.py)
-  → robot.usda           (blender_export_usd.py)
-```
-
-## URDF mapping
-
-The Layout IR maps directly to URDF structure:
-
-| IR field | URDF element |
-|----------|-------------|
-| `links[].name` | `<link name="...">` |
-| `links[].visual_mesh` | `<mesh filename="...">` |
-| `links[].parent` + `joint_type` from parts.json | `<joint type="revolute">` |
-| `origin.xyz` + `origin.rpy_deg` | `<origin xyz="..." rpy="...">` |
-
-Example URDF fragment:
-
-```xml
-<robot name="dishwasher">
-  <link name="cabinet_body">
-    <visual><geometry><mesh filename="cabinet_body.glb"/></geometry></visual>
-  </link>
-  <link name="front_door">
-    <visual><geometry><mesh filename="front_door.glb"/></geometry></visual>
-  </link>
-  <joint name="front_door_joint" type="revolute">
-    <parent link="cabinet_body"/>
-    <child link="front_door"/>
-    <axis xyz="1 0 0"/>
-    <limit lower="0" upper="1.57"/>
-  </joint>
-</robot>
+  → parts.json              (analyze)
+  → component_images/       (generate_components.py)
+  → component_glbs/         (generate_components.py)
+  → component_dims.json     (generate_components.py)
+  → placement_init.json     (initialize_placement.py)
+  → assembly.json           (initialize_placement.py / apply_critic.py)
+  → world_dims.json         (compute_world_dims.py)
+  → critic.json             (critic)  → apply_critic.py (next iteration)
+  → assembled.blend         (blender_assemble.py)
+  → robot.usda              (blender_export_usd.py)
 ```

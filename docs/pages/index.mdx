@@ -34,11 +34,11 @@ Dexter's output per run:
 
 ## How it works (at a glance)
 
-Dexter runs through [OpenCode](https://opencode.ai), a coding agent harness. An **orchestrator** agent sequences four subagents and deterministic tool scripts, pausing at two human gates:
+Dexter runs through [OpenCode](https://opencode.ai), a coding agent harness. An **orchestrator** agent sequences two subagents and deterministic tool scripts, pausing at two human gates:
 
 ![OpenCode agent harness](/assets/images/dexter/opencode_agent_harness.png)
 
-*The orchestrator routes input through four subagents; model runtimes and tools sit outside the loop.*
+*The orchestrator routes input through analyze and critic subagents; deterministic scripts handle the rest.*
 
 In the OpenCode TUI, press **Tab** or `/agents` and select **orchestrator** to run the pipeline:
 
