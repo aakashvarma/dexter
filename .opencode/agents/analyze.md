@@ -177,41 +177,31 @@ Write the result to the exact path given in the run message, conforming to
 
 ```json
 {
-  "object": "french_door_refrigerator",
+  "object": "object_name",
   "parts": [
     {
-      "name": "cabinet_body",
-      "description": "The main refrigerator cabinet body with insulated walls and internal shelving.",
+      "name": "base_body",
+      "description": "The main structural body of the object.",
       "parent": null,
       "joint_type": "fixed",
-      "world_dims": [0.91, 0.70, 1.78]
+      "world_dims": [0.60, 0.50, 1.00]
     },
     {
-      "name": "left_door",
-      "description": "The left refrigerator door on the upper section of the cabinet front.",
-      "parent": "cabinet_body",
+      "name": "hinged_panel",
+      "description": "A panel on the front of the base body that swings open on the left hinge.",
+      "parent": "base_body",
       "joint_type": "revolute",
-      "size_fraction": [0.50, 0.06, 0.65],
-      "position_in_parent": "left",
+      "size_fraction": [1.00, 0.05, 0.70],
+      "position_in_parent": "upper-center",
       "hinge_side": "left",
       "open_angle_deg": 0
     },
     {
-      "name": "right_door",
-      "description": "The right refrigerator door on the upper section of the cabinet front.",
-      "parent": "cabinet_body",
-      "joint_type": "revolute",
-      "size_fraction": [0.50, 0.06, 0.65],
-      "position_in_parent": "right",
-      "hinge_side": "right",
-      "open_angle_deg": 0
-    },
-    {
-      "name": "freezer_drawer",
-      "description": "The lower freezer drawer at the bottom of the cabinet.",
-      "parent": "cabinet_body",
+      "name": "sliding_tray",
+      "description": "A tray at the bottom of the base body that slides outward along the -Y axis.",
+      "parent": "base_body",
       "joint_type": "prismatic",
-      "size_fraction": [1.00, 1.00, 0.35],
+      "size_fraction": [0.90, 0.80, 0.20],
       "position_in_parent": "bottom-center",
       "slide_axis": "-y",
       "pullout_fraction": 0

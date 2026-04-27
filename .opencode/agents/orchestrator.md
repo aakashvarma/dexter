@@ -66,13 +66,11 @@ Run iterations starting at 1. For iteration `n` (zero-padded dir, e.g. `001`):
    `python3 tool_scripts/validate_json.py --schema schemas/render_views.schema.json --data iterations/<n>/render_views.json`.
 4. render: run
    `blender --background --python tool_scripts/blender_render_views.py -- --blend iterations/<n>/assembled.blend --cameras iterations/<n>/render_views.json --output-dir iterations/<n>/renders/`.
-5. world dims: run
-   `python3 tool_scripts/compute_world_dims.py --assembly iterations/<n>/assembly.json --dims component_dims.json --output iterations/<n>/world_dims.json`.
-   This computes per-part world size, centre, bounding box, and parent scale.
-6. critique: invoke the `critic` subagent with the source image, all rendered
-   PNGs, and `iterations/<n>/world_dims.json` (pre-computed — do not pass raw
-   assembly.json or component_dims.json). Write `iterations/<n>/critic.json`.
-7. exit check: track the best iteration by `score`. Stop when
+5. critique: invoke the `critic` subagent with the source image, all rendered
+   PNGs, and `iterations/<n>/assembly.json`. Write `iterations/<n>/critic.json`.
+   The assembly already contains per-part `world_size`, `world_center`, and
+   `rpy_deg` in metres — pass it directly; no pre-computation step needed.
+6. exit check: track the best iteration by `score`. Stop when
    `score >= loop.score_threshold and n >= loop.min_loops`, when
    `n >= loop.max_loops`, or when the score has not improved over the best for
    `loop.no_improvement_patience` consecutive iterations. Otherwise increment `n`.
@@ -128,9 +126,9 @@ Report the final deliverable `<run_dir>/robot.usda` alongside the best
   iterations/
     001/
       assembly.json          # written by initialize_placement.py
-      assembled.blend  renders/  world_dims.json  critic.json
+      assembled.blend  renders/  critic.json
     002/
-      assembly.json  assembled.blend  renders/  world_dims.json  critic.json
+      assembly.json  assembled.blend  renders/  critic.json
     ...
   robot.usda                 # final deliverable — geometry + materials
   robot_prim_map.json        # Blender object name -> USD prim path

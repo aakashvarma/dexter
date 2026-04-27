@@ -17,16 +17,16 @@ python3 tool_scripts/validate_json.py \
 
 | Schema | Artifact | Written by | When validated |
 |--------|----------|-----------|----------------|
-| `parts.schema.json` | `parts.json` | analyze agent | After analyze step |
+| `parts.schema.json` | `parts.json` | analyze subagent | After analyze step |
 | `assembly.schema.json` | `assembly.json` | initialize_placement.py / apply_critic.py | Each iteration |
-| `critic.schema.json` | `critic.json` | critic agent | Each critique |
+| `critic.schema.json` | `critic.json` | critic subagent | Each critique |
 | `placement_init.schema.json` | `placement_init.json` | initialize_placement.py | After placement init |
-| `render_views.schema.json` | `render_views.json` | orchestrator | Before rendering |
-| `component_dims.schema.json` | `component_dims.json` | generate_components.py | After component generation |
+| `render_views.schema.json` | `render_views.json` | orchestrator agent | Before rendering |
+| `component_dims.schema.json` | `component_dims.json` | blender_measure_glbs.py | After component generation |
 
 ## Retry policy
 
-When validation fails, the orchestrator re-invokes the same subagent with errors appended. Repeats up to `loop.max_validation_retries` (default: 2).
+When validation fails, the orchestrator agent re-invokes the same subagent with errors appended. Repeats up to `loop.max_validation_retries` (default: 2).
 
 ## parts.schema.json
 
@@ -34,25 +34,34 @@ Top-level: `object` (string), `parts` (array, min 1).
 
 Per part — always required: `name`, `description`, `parent`, `joint_type`.
 
-Non-root parts also require: `size_fraction` `[w,d,h]`, `position_in_parent` (string).
+Root part requires: `world_dims` `[w,d,h]` in metres.
 
-Revolute joints require: `hinge_side` (`left`|`right`|`top`|`bottom`).
+Non-root parts require: `size_fraction` `[w,d,h]`, `position_in_parent` (string).
 
-Prismatic joints require: `slide_axis` (`-y`|`+y`|`-x`|`+x`|`+z`|`-z`).
+Revolute joints require: `hinge_side` (`left`|`right`|`top`|`bottom`), `open_angle_deg` (number).
+
+Prismatic joints require: `slide_axis` (`-y`|`+y`|`-x`|`+x`|`+z`|`-z`), `pullout_fraction` (number 0–1).
 
 ## assembly.schema.json
 
 Top-level: `root`, `robot_name`, `links` (array, min 1).
 
-Per link — all required: `name`, `parent`, `visual_mesh`, `collision_mesh`, `origin`, `scale`.
+Per link — all required: `name`, `parent`, `visual_mesh`, `collision_mesh`, `world_size`, `world_center`, `rpy_deg`.
 
-`origin` requires: `xyz` `[x,y,z]`, `rpy_deg` `[rx,ry,rz]` (degrees, XYZ Euler).
+- `world_size` — `[W, D, H]` in metres (all axes > 0). `blender_assemble.py` derives `blender_scale = world_size / raw_mesh_size`.
+- `world_center` — `[x, y, z]` in metres, world-space centre at the current pose.
+- `rpy_deg` — `[rx, ry, rz]` degrees, XYZ Euler. Negative Z opens a left-hinged door; positive Z opens a right-hinged door; negative X drops a bottom-hinged door forward.
 
 ## critic.schema.json
 
 Required: `iteration` (int ≥1), `score` (0–100), `pass` (bool), `summary`, `issues`, `per_view_notes`.
 
-Per issue — required: `component`, `problem`. Optional: `locked`, `suggested_delta`, `suggested_scale_factor` (scalar or `[sx,sy,sz]`), `suggested_rotation_delta`.
+Per issue — required: `component`, `problem`. Optional corrections:
+
+- `locked` (bool) — skip this component entirely in `apply_critic.py`
+- `corrected_world_size` `[W, D, H]` — target world dimensions in metres
+- `corrected_world_center` `[x, y, z]` — target world-space centre in metres
+- `suggested_rotation_delta` `[drx, dry, drz]` — degrees to add to `rpy_deg`
 
 ## placement_init.schema.json
 
@@ -70,9 +79,9 @@ Per camera — required: `name`, `direction` `[x,y,z]`, `output`, `light_energy`
 
 ## component_dims.schema.json
 
-Required: `parts` (object map).
+Required: `parts` (object map keyed by part name).
 
-Per part: `size`, `center`, `min`, `max` — each `[x,y,z]` arrays.
+Per part: `size`, `center`, `min`, `max` — each `[x,y,z]` arrays in raw GLB coordinate space.
 
 ## Validate a full run
 

@@ -4,9 +4,9 @@
 dexter/
 ├── .opencode/
 │   └── agents/                  # Agent prompts (source of truth for behavior)
-│       ├── orchestrator.md      # Primary agent — owns all control flow
-│       ├── analyze.md           # Parts decomposition
-│       └── critic.md            # Critique IR writer
+│       ├── orchestrator.md      # Orchestrator agent — owns all control flow
+│       ├── analyze.md           # Analyze subagent — parts decomposition
+│       └── critic.md            # Critic subagent — critique IR writer
 │
 ├── config.yaml                  # Pipeline knobs (loops, fal, render, USD)
 ├── opencode.json                # Agent definitions, permissions, prompt paths
@@ -24,7 +24,6 @@ dexter/
 │   ├── generate_components.py
 │   ├── initialize_placement.py
 │   ├── apply_critic.py
-│   ├── compute_world_dims.py
 │   ├── blender_measure_glbs.py
 │   ├── blender_assemble.py
 │   ├── blender_render_views.py
@@ -55,11 +54,11 @@ dexter/
 
 Defines all agents: mode (primary/subagent), temperature, prompt file path, and permissions (edit, bash, read, task, webfetch).
 
-The orchestrator has broad bash permissions (`python*`, `blender*`). Subagents are tightly scoped.
+The orchestrator agent has broad bash permissions (`python*`, `blender*`). Subagents are tightly scoped.
 
 ### config.yaml
 
-Read by the orchestrator at run start. Contains:
+Read by the orchestrator agent at run start. Contains:
 
 - `paths` — directories and blender binary
 - `loop` — iteration exit conditions
@@ -75,7 +74,7 @@ Concise pipeline semantics for agents: step order, gates, gotchas. When in doubt
 
 ### .opencode/agents/*.md
 
-The actual instructions each agent follows. The orchestrator prompt is the most detailed — it specifies exact step ordering and gate behavior.
+The actual instructions each agent follows. The orchestrator agent prompt is the most detailed — it specifies exact step ordering and gate behavior.
 
 ### schemas/
 
@@ -102,7 +101,6 @@ Gitignored. Structure per run:
     assembled.blend
     render_views.json
     renders/
-    world_dims.json
     critic.json
   robot.usda
   robot_prim_map.json
@@ -115,6 +113,6 @@ Gitignored. Structure per run:
 |---------|-----|
 | Test suite | No CI; validate with `validate_json.py` + manual runs |
 | Python package manifest | Only `requirements.txt` |
-| Pipeline driver script | OpenCode orchestrator is the only entrypoint |
+| Pipeline driver script | OpenCode orchestrator agent is the only entrypoint |
 | API keys | Environment variables only |
 | Run artifacts | `.intermediate/` is gitignored |

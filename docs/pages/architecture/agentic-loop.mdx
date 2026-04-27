@@ -4,7 +4,7 @@ Give Dexter a photo of a product. Within a single OpenCode session, it hands you
 
 ## The big picture
 
-Dexter is built around a single orchestrator agent. You talk to the orchestrator; it runs everything else. It sequences two specialist subagents, calls deterministic Python and Blender scripts, and pauses twice to ask for your sign-off before moving forward.
+Dexter is built around a single orchestrator agent. You talk to the orchestrator agent; it runs everything else. It sequences two specialist subagents, calls deterministic Python and Blender scripts, and pauses twice to ask for your sign-off before moving forward.
 
 ```mermaid
 flowchart TD
@@ -17,8 +17,7 @@ flowchart TD
         apply["apply_critic.py\n→ assembly.json"] --> assemble
         assemble --> renderplan["render_views.json"]
         renderplan --> render["blender_render_views.py\n→ renders/"]
-        render --> worlddims["compute_world_dims.py\n→ world_dims.json"]
-        worlddims --> critique["critic subagent\n→ critic.json"]
+        render --> critique["critic subagent\n→ critic.json"]
         critique --> decide{"Stop?"}
         decide -->|no| apply
     end
@@ -31,7 +30,7 @@ flowchart TD
 
 ## Stage 1 — Understanding the object
 
-The **analyze** agent reads your source photo and writes `parts.json` — names, descriptions, parent links, joint types, and geometry hints. The orchestrator **stops here** for your review before spending API credits.
+The **analyze subagent** reads your source photo and writes `parts.json` — names, descriptions, parent links, joint types, and geometry hints. The orchestrator agent **stops here** for your review before spending API credits.
 
 ---
 
@@ -51,15 +50,14 @@ The **analyze** agent reads your source photo and writes `parts.json` — names,
 
 Each iteration:
 
-1. `blender_assemble.py` builds `assembled.blend`
-2. The orchestrator writes `render_views.json`
-3. `blender_render_views.py` renders four views
-4. `compute_world_dims.py` writes per-part world dimensions
-5. The **critic** agent scores the result and writes corrections
+1. `blender_assemble.py` builds `assembled.blend` — it derives Blender-native scale and pivot origin from each link's `world_size`, `world_center`, and `rpy_deg` using raw mesh bounding boxes from `component_dims.json`
+2. The orchestrator agent writes `render_views.json`
+3. `blender_render_views.py` renders four views (front, top, left, isometric)
+4. The **critic subagent** receives the renders, `assembly.json` (which contains per-part `world_size`, `world_center`, and `rpy_deg`), and the source image, then scores the result and writes corrections to `critic.json`
 
-If the loop continues, `apply_critic.py` applies critic deltas to produce the next `assembly.json`. Locked components are skipped. After a regression, the orchestrator can base the next iteration on the best-scoring layout.
+If the loop continues, `apply_critic.py` applies critic corrections directly to world-space values in the previous `assembly.json` to produce the next one. `locked` components are left unchanged. After a regression, the orchestrator agent can base the next iteration on the best-scoring layout instead of the most recent one.
 
-The loop stops when `config.yaml` exit conditions are met. The orchestrator then pauses for your placement review.
+The loop stops when `config.yaml` exit conditions are met. The orchestrator agent then pauses for your placement review.
 
 ---
 
@@ -75,7 +73,7 @@ After you approve a layout, `blender_export_usd.py` exports `robot.usda`, `textu
 opencode run --agent orchestrator -- "resume .intermediate/dishwasher/001/"
 ```
 
-The orchestrator checks disk before every step and skips outputs that already exist and validate.
+The orchestrator agent checks disk before every step and skips outputs that already exist and validate.
 
 ---
 

@@ -6,17 +6,16 @@ Dexter passes data between agents and tools through typed **Intermediate Represe
 
 | IR name | File | Producer | Consumer |
 |---------|------|----------|----------|
-| **Parts IR** | `parts.json` | analyze agent | generate_components, initialize_placement |
-| **Layout IR** | `assembly.json` | initialize_placement.py / apply_critic.py | blender_assemble, compute_world_dims, USD export |
-| **Critique IR** | `critic.json` | critic agent | apply_critic.py, orchestrator |
+| **Parts IR** | `parts.json` | analyze subagent | generate_components, initialize_placement |
+| **Layout IR** | `assembly.json` | initialize_placement.py / apply_critic.py | blender_assemble, USD export |
+| **Critique IR** | `critic.json` | critic subagent | apply_critic.py, orchestrator agent |
 | **Placement init** | `placement_init.json` | initialize_placement.py | iteration 001 assembly |
-| **World dims** | `world_dims.json` | compute_world_dims.py | critic |
-| **Component dims** | `component_dims.json` | generate_components.py | initialize_placement, compute_world_dims |
-| **Render views** | `render_views.json` | orchestrator | blender_render_views.py |
+| **Component dims** | `component_dims.json` | generate_components.py (via blender_measure_glbs.py) | initialize_placement, blender_assemble |
+| **Render views** | `render_views.json` | orchestrator agent | blender_render_views.py |
 
 ## Parts IR (`parts.json`)
 
-Structured output of the **analyze** subagent: the part list and kinematic tree.
+Structured output of the **analyze subagent**: the part list and kinematic tree.
 
 ```json
 {
@@ -26,7 +25,8 @@ Structured output of the **analyze** subagent: the part list and kinematic tree.
       "name": "cabinet_body",
       "description": "The main dishwasher cabinet with insulated walls.",
       "parent": null,
-      "joint_type": "fixed"
+      "joint_type": "fixed",
+      "world_dims": [0.60, 0.60, 0.85]
     },
     {
       "name": "front_door",
@@ -35,7 +35,8 @@ Structured output of the **analyze** subagent: the part list and kinematic tree.
       "joint_type": "revolute",
       "size_fraction": [1.00, 0.06, 0.60],
       "position_in_parent": "center",
-      "hinge_side": "bottom"
+      "hinge_side": "bottom",
+      "open_angle_deg": 0
     }
   ]
 }
@@ -45,14 +46,16 @@ Structured output of the **analyze** subagent: the part list and kinematic tree.
 
 - `name` → file stem for PNGs, GLBs, and assembly links
 - `description` → copied into image generation prompts
+- `world_dims` (root only) → real-world dimensions in metres for scale computation
 - `size_fraction` + `position_in_parent` → placement hint computation
 - `hinge_side` / `slide_axis` → open pose calculation
+- `open_angle_deg` / `pullout_fraction` → initial pose in the first `assembly.json`
 
 Approved by human gate before 3D generation begins.
 
 ## Layout IR (`assembly.json`)
 
-Layout IR: position, orientation, and scale for each link. Iteration 001 comes from `initialize_placement.py`; later iterations from `apply_critic.py`.
+World-space position, orientation, and size for each link in metres. Iteration 001 comes from `initialize_placement.py`; later iterations from `apply_critic.py`.
 
 ```json
 {
@@ -64,8 +67,18 @@ Layout IR: position, orientation, and scale for each link. Iteration 001 comes f
       "parent": null,
       "visual_mesh": "component_glbs/cabinet_body.glb",
       "collision_mesh": "component_glbs/cabinet_body.glb",
-      "origin": {"xyz": [0.0, 0.0, 0.425], "rpy_deg": [0.0, 0.0, 0.0]},
-      "scale": [1.7, 1.6, 1.8]
+      "world_size": [0.600, 0.522, 0.876],
+      "world_center": [0.0, 0.0, 0.438],
+      "rpy_deg": [0.0, 0.0, 0.0]
+    },
+    {
+      "name": "front_door",
+      "parent": "cabinet_body",
+      "visual_mesh": "component_glbs/front_door.glb",
+      "collision_mesh": "component_glbs/front_door.glb",
+      "world_size": [0.600, 0.050, 0.530],
+      "world_center": [0.0, 0.085, 0.265],
+      "rpy_deg": [0.0, 0.0, 0.0]
     }
   ]
 }
@@ -74,36 +87,21 @@ Layout IR: position, orientation, and scale for each link. Iteration 001 comes f
 This single IR drives:
 
 1. **Blender assembly** — visual scene for rendering
-2. **Critic comparison** — world-space dimensions from scale + raw dims
+2. **Critic comparison** — world-space dimensions and positions read directly from the IR
 3. **USD export** — geometry for Isaac Sim
 
-### Transform chain
+### Transform math in `blender_assemble.py`
 
-`blender_assemble.py` applies:
-
-```
-world_pos = parent_scale × (origin_xyz + child_scale × raw_mesh_center)
-```
-
-**Scale inheritance (non-negotiable):**
+`blender_assemble.py` derives Blender-native `scale` and pivot `origin.xyz` at render time using the raw mesh bounding boxes from `component_dims.json`:
 
 ```
-child_scale[axis] = target_world_size[axis] / (parent_scale[axis] × raw_GLB_size[axis])
+blender_scale[i]  = world_size[i] / raw_size[i]
+
+origin_xyz[i]     = world_center[i] / parent_blender_scale[i]
+                    − (R(rpy_deg) × (blender_scale × raw_center))[i]
 ```
 
-**Back-computing origin from target world position:**
-
-```
-origin_xyz[axis] = target_world_center[axis] / parent_scale[axis]
-                   − child_scale[axis] × raw_mesh_center[axis]
-```
-
-With rotation (`rpy_deg = [0, 0, θ]`):
-
-```
-rotated = R_Z(θ) × (child_scale × raw_mesh_center)
-origin_xyz = target_world_center / parent_scale − rotated
-```
+For the root link, `parent_blender_scale = [1, 1, 1]`. Children must appear after their parent in the `links` array.
 
 ### Door rotation conventions
 
@@ -111,85 +109,96 @@ origin_xyz = target_world_center / parent_scale − rotated
 |-----------|------|------|
 | Left-hinged door | `rpy_deg[2]` (Z) | Negative opens forward |
 | Right-hinged door | `rpy_deg[2]` (Z) | Positive opens forward |
-| Bottom-hinged door | `rpy_deg[0]` (X) | Positive drops down |
+| Bottom-hinged door | `rpy_deg[0]` (X) | Negative drops forward |
 | Top-hinged lid | `rpy_deg[1]` (Y) | Positive opens backward |
 
 ## Critique IR (`critic.json`)
 
-Structured output of the **critic** subagent: score and per-component layout fixes.
+Structured output of the **critic subagent**: score and per-component layout corrections.
 
 ```json
 {
-  "iteration": 3,
+  "iteration": 2,
   "score": 78,
   "pass": false,
-  "summary": "Door angle too shallow; rack position good.",
+  "summary": "Door angle too shallow; racks are laterally offset.",
   "issues": [
     {
       "component": "front_door",
-      "problem": "Open angle ~30° but source shows ~45°.",
-      "suggested_rotation_delta": [15.0, 0.0, 0.0]
+      "problem": "Open angle ~20° but source shows ~45°.",
+      "suggested_rotation_delta": [-25.0, 0.0, 0.0]
+    },
+    {
+      "component": "upper_dish_rack",
+      "problem": "Rack is shifted left; size is slightly too large.",
+      "corrected_world_size": [0.52, 0.55, 0.18],
+      "corrected_world_center": [0.0, -0.12, 0.65]
     },
     {
       "component": "cabinet_body",
       "locked": true,
-      "problem": "Correct size, position, no collisions."
+      "problem": "Correct size, position, and orientation."
     }
   ],
   "per_view_notes": {
     "front": "Door angle too shallow.",
-    "top": "Alignment OK.",
+    "top": "Rack offset visible.",
     "left": "Rack depth matches.",
-    "isometric": "Overall shape good."
+    "isometric": "Overall shape reasonable."
   }
 }
 ```
 
-Corrections are in **parent-local space**:
+### How `apply_critic.py` consumes this
 
-```
-origin_delta[axis] = Δworld[axis] / parent_scale[axis]
-```
+Corrections are applied **directly** to the world-space values in `assembly.json` — no back-computation needed:
+
+| Field | Action |
+|-------|--------|
+| `corrected_world_size` | Replaces `link.world_size` directly |
+| `corrected_world_center` | Replaces `link.world_center` directly |
+| `suggested_rotation_delta` | Added to `link.rpy_deg` element-wise |
+| `locked: true` | Component is left entirely unchanged |
+| No entry | Component is left unchanged |
+
+For revolute joints: whenever `suggested_rotation_delta` is provided, the critic subagent also provides `corrected_world_center` reflecting the mesh centre at the new angle.
 
 ## Placement init (`placement_init.json`)
 
-Pre-computed scales and poses from `initialize_placement.py`. Used to build `iterations/001/assembly.json`. All values are derived from `parts.json` geometry fields. If init looks wrong, fix `parts.json` and delete `placement_init.json` plus `iterations/001/assembly.json` to regenerate.
+Pre-computed scales and poses from `initialize_placement.py`. Used to build `iterations/001/assembly.json`. All values are derived from `parts.json` geometry fields and raw mesh sizes from `component_dims.json`. If init looks wrong, fix `parts.json` and delete `placement_init.json` plus `iterations/001/assembly.json` to regenerate.
 
 ## Component dims (`component_dims.json`)
 
-Raw GLB bounding boxes before any scale:
+Raw GLB bounding boxes before any scale, written by `blender_measure_glbs.py` and called automatically by `generate_components.py`:
 
 ```json
 {
   "parts": {
     "front_door": {
-      "size": [0.28, 0.05, 0.33],
-      "center": [0.0, 0.0, 0.17],
-      "min": [-0.14, -0.025, 0.005],
-      "max": [0.14, 0.025, 0.335]
+      "size": [0.930, 0.054, 0.770],
+      "center": [0.0, 0.0, 0.385],
+      "min": [-0.465, -0.027, 0.0],
+      "max": [0.465, 0.027, 0.770]
     }
   }
 }
 ```
 
-Never compare raw dims to the source image directly — always compute world size:
-
-```
-world_size[axis] = parent_scale[axis] × child_scale[axis] × raw_size[axis]
-```
+Used by `initialize_placement.py` to compute scale factors and by `blender_assemble.py` to back-compute Blender-native pivot origin. Never compare raw dims to the source image directly — always derive world size via the assembly IR.
 
 ## Data flow chain
 
 ```
 source.png
-  → parts.json              (analyze)
+  → parts.json              (analyze subagent)
   → component_images/       (generate_components.py)
   → component_glbs/         (generate_components.py)
-  → component_dims.json     (generate_components.py)
+  → component_dims.json     (generate_components.py → blender_measure_glbs.py)
   → placement_init.json     (initialize_placement.py)
-  → assembly.json           (initialize_placement.py / apply_critic.py)
-  → world_dims.json         (compute_world_dims.py)
-  → critic.json             (critic)  → apply_critic.py (next iteration)
+  → iterations/001/assembly.json  (initialize_placement.py)
   → assembled.blend         (blender_assemble.py)
+  → renders/                (blender_render_views.py)
+  → critic.json             (critic subagent)
+  → iterations/NNN/assembly.json  (apply_critic.py)
   → robot.usda              (blender_export_usd.py)
 ```

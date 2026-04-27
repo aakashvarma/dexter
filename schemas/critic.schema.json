@@ -44,36 +44,26 @@
             "type": "string",
             "description": "What is wrong with this component's placement."
           },
-          "axis": {
-            "type": "string",
-            "enum": ["x", "y", "z"],
-            "description": "Axis the correction should act on, if applicable."
+          "corrected_world_size": {
+            "type": "array",
+            "items": {"type": "number", "exclusiveMinimum": 0},
+            "minItems": 3,
+            "maxItems": 3,
+            "description": "Target world dimensions [W, D, H] in metres. apply_critic.py assigns this directly to link.world_size in assembly.json."
           },
-          "direction": {
-            "type": "string",
-            "enum": ["+", "-"],
-            "description": "Direction of the correction along axis, if applicable."
-          },
-          "suggested_delta": {
+          "corrected_world_center": {
             "type": "array",
             "items": {"type": "number"},
             "minItems": 3,
             "maxItems": 3,
-            "description": "Suggested location change [dx, dy, dz]."
-          },
-          "suggested_scale_factor": {
-            "oneOf": [
-              {"type": "number", "exclusiveMinimum": 0},
-              {"type": "array", "items": {"type": "number", "exclusiveMinimum": 0}, "minItems": 3, "maxItems": 3}
-            ],
-            "description": "Suggested multiplicative scale change: uniform scalar OR [sx, sy, sz] per-axis array."
+            "description": "Target world-space centre [x, y, z] in metres. apply_critic.py assigns this directly to link.world_center in assembly.json."
           },
           "suggested_rotation_delta": {
             "type": "array",
             "items": {"type": "number"},
             "minItems": 3,
             "maxItems": 3,
-            "description": "Suggested rotation change in degrees [dx, dy, dz], added to rotation."
+            "description": "Rotation change in degrees [drx, dry, drz] to add to link.rpy_deg in assembly.json."
           }
         }
       }

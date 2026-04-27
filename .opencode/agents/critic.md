@@ -8,38 +8,15 @@ critique file. Judge **position and size** equally, and flag mesh collisions
 
 - The source image of the target object.
 - The rendered views of the current assembly (front, top, left, isometric).
-- `world_dims.json`: pre-computed per-part world dimensions (see below). Do not
-  compute these yourself.
+- `assembly.json`: the current per-part world dimensions and positions. For each
+  link:
+  - `world_size [W, D, H]` — actual world dimensions in metres.
+  - `world_center [x, y, z]` — world-space centre of the mesh at its current pose.
+  - `rpy_deg [rx, ry, rz]` — current rotation in degrees (XYZ Euler).
 - The exact `critic.json` output path and the current iteration number.
 
-## world_dims.json structure
-
-For each part:
-
-- `world_size [W, D, H]` — actual world dimensions in metres.
-- `world_center [x, y, z]` — world-space centre position.
-- `world_min`, `world_max` — world-space bounding box corners.
-- `parent_scale [sx, sy, sz]` — scale of the parent link (use this to convert a
-  desired world-space position shift Δworld into `suggested_delta`:
-  `delta[axis] = Δworld[axis] / parent_scale[axis]`).
-
 Use the rendered views to judge whether parts visually interpenetrate; do not
-rely on automated bounding-box collision data.
-
-## Computing corrections
-
-Use `world_size` from `world_dims.json` to judge scale and position directly:
-
-- **Scale** — if a part looks W_target wide but measures W_current in `world_size`:
-  `suggested_scale_factor = W_target / W_current` (uniform scalar), or
-  `[Wx_target/Wx_current, Wy_target/Wy_current, Wz_target/Wz_current]` per axis.
-- **Position** — to shift a part's world centre by Δworld:
-  `suggested_delta[axis] = Δworld[axis] / parent_scale[axis]` (from `world_dims.json`).
-- **Rotation** — for revolute joints, `suggested_rotation_delta = [0, 0, Δθ_deg]`;
-  positive opens a right-hinged door further, negative opens a left-hinged door.
-  Use the top-view render to judge the open angle.
-
-Include all three in one issue entry whenever more than one needs fixing.
+rely on bounding-box data alone.
 
 ## What to write
 
@@ -52,25 +29,30 @@ Conform to `schemas/critic.schema.json`:
 
   1. **Scale** — compare `world_size` to the expected real-world dimension from
      the source image. Is each axis within ~10 % of target?
-     - If not: include `suggested_scale_factor` as a uniform scalar OR a
-       `[sx, sy, sz]` per-axis array when axes differ.
-     - If correct: omit `suggested_scale_factor`.
+     - If not: include `corrected_world_size: [W, D, H]` with the target size in
+       metres. State the values you want directly — no ratio calculation needed.
+     - If correct: omit `corrected_world_size`.
 
-  2. **Position** — is the part's world centre in the right place relative to its
-     parent? Check front (height), top (x/y alignment, door angle), left (depth,
-     drawer pull-out), and isometric views.
-     - If not: include `suggested_delta [dx, dy, dz]` in parent-local space
-       (`Δworld[axis] / parent_scale[axis]`).
-     - If correct: omit `suggested_delta`.
+  2. **Position** — is the part's world centre in the right place? Check front
+     (height), top (x/y alignment, door angle), left (depth, drawer pull-out),
+     and isometric views.
+     - If not: include `corrected_world_center: [x, y, z]` with the target centre
+       in metres. Read the current centre from `assembly.json` and state where it
+       should move to.
+     - If correct: omit `corrected_world_center`.
 
   3. **Orientation** — for revolute/prismatic joints, is the open angle or
      pull-out distance correct? Use the top-view render for door angles.
      - If not: include `suggested_rotation_delta [drx, dry, drz]` (degrees to
-       add to rpy_deg).
+       add to the current `rpy_deg`). Positive opens a right-hinged door further;
+       negative opens a left-hinged door further.
+     - For revolute joints: whenever you provide `suggested_rotation_delta`, also
+       provide `corrected_world_center` as the door mesh centre at the **new**
+       desired angle (judge this from the top-view render).
      - If correct: omit `suggested_rotation_delta`.
 
   **Always provide every applicable correction in a single issue entry.** Do not
-  pick just the largest error; include `suggested_delta`, `suggested_scale_factor`,
+  pick just the largest error; include `corrected_world_size`, `corrected_world_center`,
   and `suggested_rotation_delta` together whenever more than one is needed.
 
   Set `locked: true` **only when all three criteria are satisfied**:

@@ -404,19 +404,20 @@ def _flatten_hints_to_links(
         # Use the open pose if one was computed (open_angle_deg / pullout_fraction > 0),
         # otherwise use the closed pose.
         if "open_pose" in hint:
-            origin_xyz = hint["open_pose"]["open_origin_xyz"]
-            rpy_deg    = hint["open_pose"].get("open_rpy_deg", [0.0, 0.0, 0.0])
+            world_center = hint["open_pose"]["open_world_center"]
+            rpy_deg      = hint["open_pose"].get("open_rpy_deg", [0.0, 0.0, 0.0])
         else:
-            origin_xyz = hint["closed_pose"]["origin_xyz"]
-            rpy_deg    = hint["closed_pose"]["rpy_deg"]
+            world_center = hint["closed_pose"]["world_center"]
+            rpy_deg      = hint["closed_pose"]["rpy_deg"]
 
         links.append({
-            "name":           name,
-            "parent":         parent_name,
-            "visual_mesh":    f"{glbs_dir}/{name}.glb",
+            "name":         name,
+            "parent":       parent_name,
+            "visual_mesh":  f"{glbs_dir}/{name}.glb",
             "collision_mesh": f"{glbs_dir}/{name}.glb",
-            "origin":         {"xyz": origin_xyz, "rpy_deg": rpy_deg},
-            "scale":          hint["child_scale"],
+            "world_size":   hint["estimated_world_dims"],
+            "world_center": world_center,
+            "rpy_deg":      rpy_deg,
         })
         _flatten_hints_to_links(hint.get("children", []), name, glbs_dir, links)
 
@@ -427,21 +428,19 @@ def build_assembly(
     run_dir_str: str,
     glbs_dir: str,
     root_name: str,
-    root_scale: list[float],
+    root_world_dims: list[float],
     root_world_center: list[float],
-    raw_root_center: list[float],
     child_hints: list[dict],
 ) -> dict:
     """Build the assembly.json dict from placement hints."""
-    root_origin_xyz = compute_origin_xyz(root_world_center, [1.0, 1.0, 1.0], root_scale, raw_root_center)
-
     links: list[dict] = [{
-        "name":           root_name,
-        "parent":         None,
-        "visual_mesh":    f"{glbs_dir}/{root_name}.glb",
+        "name":         root_name,
+        "parent":       None,
+        "visual_mesh":  f"{glbs_dir}/{root_name}.glb",
         "collision_mesh": f"{glbs_dir}/{root_name}.glb",
-        "origin":         {"xyz": [round(v, 5) for v in root_origin_xyz], "rpy_deg": [0.0, 0.0, 0.0]},
-        "scale":          [round(v, 6) for v in root_scale],
+        "world_size":   [round(v, 5) for v in root_world_dims],
+        "world_center": [round(v, 5) for v in root_world_center],
+        "rpy_deg":      [0.0, 0.0, 0.0],
     }]
     _flatten_hints_to_links(child_hints, root_name, glbs_dir, links)
 
@@ -618,7 +617,7 @@ def initialize_placement(run_dir: str | Path) -> None:
     # Write iterations/001/assembly.json
     assembly = build_assembly(
         object_name, run, str(run), glbs_dir,
-        root_name, root_scale, root_world_center, raw_root["center"],
+        root_name, root_world, root_world_center,
         child_hints,
     )
     assembly_path.parent.mkdir(parents=True, exist_ok=True)

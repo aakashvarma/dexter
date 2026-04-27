@@ -2,24 +2,24 @@
 
 Not everything in Dexter needs an AI agent. Calling image APIs, converting PNGs to 3D meshes, measuring files, building Blender scenes, and applying critic corrections are fully deterministic. For all of that, Dexter uses plain Python and Blender scripts.
 
-These live in `tool_scripts/`. The orchestrator runs them via bash as needed. API keys always come from environment variables — never from config files.
+These live in `tool_scripts/`. The orchestrator agent runs them via bash as needed. API keys always come from environment variables — never from config files.
 
 | Script | What it does | Key input → output |
 |--------|-------------|-------------------|
 | `generate_components.py` | PNGs, GLBs, and dims for all parts | `parts.json` + `source.png` → `component_images/`, `component_glbs/`, `component_dims.json` |
-| `initialize_placement.py` | Pre-computes scales and first layout | `parts.json` + dims → `placement_init.json`, `iterations/001/assembly.json` |
+| `initialize_placement.py` | Pre-computes scales and first layout | `parts.json` + `component_dims.json` → `placement_init.json`, `iterations/001/assembly.json` |
 | `apply_critic.py` | Applies critic corrections to prior layout | `assembly.json` + `critic.json` → next `assembly.json` |
-| `compute_world_dims.py` | Per-part world size, centre, bbox, parent scale | `assembly.json` + dims → `world_dims.json` |
-| `blender_assemble.py` | Builds a Blender scene from the layout | `assembly.json` → `assembled.blend` |
-| `blender_render_views.py` | Renders four diagnostic views | `assembled.blend` → `renders/*.png` |
+| `blender_assemble.py` | Builds a Blender scene from the layout | `assembly.json` + `component_dims.json` → `assembled.blend` |
+| `blender_render_views.py` | Renders four diagnostic views | `assembled.blend` + `render_views.json` → `renders/*.png` |
 | `blender_export_usd.py` | Exports the final USD asset | `assembled.blend` → `robot.usda` |
+| `blender_measure_glbs.py` | Measures raw GLB bounding boxes | `component_glbs/` → `component_dims.json` |
 | `validate_json.py` | Validates an artifact against its schema | JSON + schema → pass or fail |
 
 ---
 
 ## generate_components.py
 
-Runs after the parts list is approved. Reads `config.yaml` and `parts.json`, generates one PNG per part via OpenAI, one GLB per part via fal.ai, and measures each GLB with Blender into `component_dims.json`. Skips parts whose outputs already exist.
+Runs after the parts list is approved. Reads `config.yaml` and `parts.json`, generates one PNG per part via OpenAI, one GLB per part via fal.ai, and then calls `blender_measure_glbs.py` inside Blender to measure each GLB into `component_dims.json`. Skips parts whose outputs already exist. Skips the entire step if `component_dims.json` already exists.
 
 ```bash
 python3 tool_scripts/generate_components.py --run-dir .intermediate/dishwasher/001
@@ -31,7 +31,9 @@ Requires `OPENAI_API_KEY` and `FAL_KEY`.
 
 ## initialize_placement.py
 
-Combines geometry hints from `parts.json` with measured mesh sizes from `component_dims.json` to produce scale factors and poses for every part. Writes `placement_init.json` and the first `iterations/001/assembly.json`.
+Combines geometry hints from `parts.json` with raw mesh sizes from `component_dims.json` to produce scale factors and world-space poses for every part. Writes `placement_init.json` and the first `iterations/001/assembly.json`.
+
+Both outputs are skipped if they already exist.
 
 ```bash
 python3 tool_scripts/initialize_placement.py --run-dir .intermediate/dishwasher/001
@@ -41,7 +43,15 @@ python3 tool_scripts/initialize_placement.py --run-dir .intermediate/dishwasher/
 
 ## apply_critic.py
 
-From iteration 002 onward, applies critic corrections deterministically: adds position deltas, multiplies scale, adds rotation deltas. Skips `locked` components.
+From iteration 002 onward, applies critic corrections deterministically by assigning world-space values directly:
+
+- `corrected_world_size` → replaces `link.world_size`
+- `corrected_world_center` → replaces `link.world_center`
+- `suggested_rotation_delta` → added to `link.rpy_deg`
+- `locked: true` → component is left unchanged
+- Un-flagged components → left unchanged
+
+No back-computation or scale factors needed. After writing, the output is validated against `schemas/assembly.schema.json`.
 
 ```bash
 python3 tool_scripts/apply_critic.py \
@@ -50,24 +60,23 @@ python3 tool_scripts/apply_critic.py \
   --output        iterations/002/assembly.json
 ```
 
----
-
-## compute_world_dims.py
-
-Computes per-part world dimensions from `assembly.json` and raw GLB dims. Output feeds the critic so it can judge scale and position without recomputing transforms.
-
-```bash
-python3 tool_scripts/compute_world_dims.py \
-  --assembly iterations/001/assembly.json \
-  --dims     component_dims.json \
-  --output   iterations/001/world_dims.json
-```
+After a score regression, pass the best-scoring layout as `--prev-assembly` instead of the most recent one.
 
 ---
 
 ## blender_assemble.py
 
-Imports every GLB in `assembly.json`, applies transforms, and builds the parent-child hierarchy as `assembled.blend`.
+Imports every GLB listed in `assembly.json`, derives Blender-native `scale` and pivot `origin.xyz` from each link's `world_size`, `world_center`, and `rpy_deg` using raw mesh bounding boxes from `component_dims.json`, wires up the parent-child hierarchy, and saves the result as `assembled.blend`.
+
+Transform math per link:
+
+```
+blender_scale[i]  = world_size[i] / raw_size[i]
+origin_xyz[i]     = world_center[i] / parent_blender_scale[i]
+                    − (R(rpy_deg) × (blender_scale × raw_center))[i]
+```
+
+`component_dims.json` is loaded automatically from the `root` path stored inside the assembly file.
 
 ```bash
 blender --background --python tool_scripts/blender_assemble.py -- \
@@ -79,12 +88,12 @@ blender --background --python tool_scripts/blender_assemble.py -- \
 
 ## blender_render_views.py
 
-Reads `render_views.json` (written by the orchestrator) and renders four cameras: front, top, left, and isometric.
+Reads `render_views.json` (written by the orchestrator agent) and renders four auto-framed cameras: front, top, left, and isometric.
 
 ```bash
 blender --background --python tool_scripts/blender_render_views.py -- \
-  --blend iterations/001/assembled.blend \
-  --cameras iterations/001/render_views.json \
+  --blend    iterations/001/assembled.blend \
+  --cameras  iterations/001/render_views.json \
   --output-dir iterations/001/renders/
 ```
 
@@ -92,7 +101,7 @@ blender --background --python tool_scripts/blender_render_views.py -- \
 
 ## blender_export_usd.py
 
-Exports the approved `assembled.blend` to `robot.usda` with textures in `textures/` and a `robot_prim_map.json` mapping Blender object names to USD prim paths.
+Exports the approved `assembled.blend` to `robot.usda` with textures in `textures/` and a `robot_prim_map.json` mapping Blender object names to USD prim paths. Keeps Blender Z-up orientation (`convert_orientation=False`) for Isaac Sim compatibility.
 
 ```bash
 blender --background --python tool_scripts/blender_export_usd.py -- \
@@ -103,9 +112,21 @@ blender --background --python tool_scripts/blender_export_usd.py -- \
 
 ---
 
+## blender_measure_glbs.py
+
+Runs inside Blender. For every `.glb` in a directory, imports the mesh, computes the world-space bounding box, and writes `component_dims.json`. Called automatically by `generate_components.py` after GLB downloads complete.
+
+```bash
+blender --background --python tool_scripts/blender_measure_glbs.py -- \
+  --glbs-dir .intermediate/dishwasher/001/component_glbs \
+  --output   .intermediate/dishwasher/001/component_dims.json
+```
+
+---
+
 ## validate_json.py
 
-Checks subagent and orchestrator JSON output against the corresponding schema.
+Checks subagent and orchestrator agent JSON output against the corresponding schema.
 
 ```bash
 python3 tool_scripts/validate_json.py \

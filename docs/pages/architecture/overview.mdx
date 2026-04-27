@@ -1,14 +1,14 @@
 # Architecture Overview
 
-Dexter is an **orchestrator-driven agentic pipeline**. One primary OpenCode agent coordinates deterministic tool scripts and two specialized subagents. There is no standalone Python pipeline driver — the orchestrator is the only entrypoint.
+Dexter is an **orchestrator-driven agentic pipeline**. One primary OpenCode agent coordinates deterministic tool scripts and two specialized subagents. There is no standalone Python pipeline driver — the orchestrator agent is the only entrypoint.
 
 ## System diagram
 
 ![OpenCode agent harness](/assets/images/dexter/opencode_agent_harness.png)
 
-### User and orchestrator
+### User and orchestrator agent
 
-You provide a prompt — for example, *"build the dishwasher from `input_images/dishwasher.png`"*. The **orchestrator** is the only entrypoint (`opencode.json` → `orchestrator` agent). It reads `config.yaml`, probes `.intermediate/<asset>/<NNN>/` for existing artifacts, decides which step to run next, and invokes subagents through OpenCode's Task tool. Subagents never talk to each other; the orchestrator passes context between them.
+You provide a prompt — for example, *"build the dishwasher from `input_images/dishwasher.png`"*. The **orchestrator agent** is the only entrypoint (`opencode.json` → `orchestrator` agent). It reads `config.yaml`, probes `.intermediate/<asset>/<NNN>/` for existing artifacts, decides which step to run next, and invokes subagents through OpenCode's Task tool. Subagents never talk to each other; the orchestrator agent passes context between them.
 
 ### Subagents
 
@@ -16,14 +16,14 @@ Each subagent writes **one artifact** and exits:
 
 | Subagent | Role | Output |
 |----------|------|--------|
-| **analyze** | Reads the source image and decomposes the object into moving parts | `parts.json` |
-| **critic** | Scores rendered views against the source image | `critic.json` per iteration |
+| **analyze subagent** | Reads the source image and decomposes the object into moving parts | `parts.json` |
+| **critic subagent** | Scores rendered views against the source image and writes corrections | `critic.json` per iteration |
 
-Between subagent steps the orchestrator runs **tool scripts** directly: `generate_components.py`, `initialize_placement.py`, `apply_critic.py`, `blender_assemble.py`, `blender_render_views.py`, `compute_world_dims.py`, and finally `blender_export_usd.py`.
+Between subagent steps the orchestrator agent runs **tool scripts** directly: `generate_components.py`, `initialize_placement.py`, `apply_critic.py`, `blender_assemble.py`, `blender_render_views.py`, and finally `blender_export_usd.py`.
 
 **Human gates**: you review `parts.json` before any 3D generation, and the best placement iteration before USD export.
 
-**Placement ↔ critic loop**: iteration 001's `assembly.json` comes from `initialize_placement.py`. Later iterations use `apply_critic.py` to apply critic corrections deterministically. Each round assembles, renders four views, computes world dims, and critiques. The loop stops when `config.yaml` exit conditions are met; the orchestrator keeps the best-scoring iteration.
+**Placement ↔ critic loop**: iteration 001's `assembly.json` comes from `initialize_placement.py`. Later iterations use `apply_critic.py` to apply critic corrections directly to world-space values. Each round assembles, renders four views, and the critic subagent scores the result. The loop stops when `config.yaml` exit conditions are met; the orchestrator agent keeps the best-scoring iteration.
 
 ### Model runtime
 
@@ -31,11 +31,11 @@ Subagents reason through your logged-in OpenCode model (Codex OAuth). Model name
 
 ### Tools
 
-Deterministic code the orchestrator runs via bash:
+Deterministic code the orchestrator agent runs via bash:
 
-- **Component generation** — `generate_components.py` (`OPENAI_API_KEY`, `FAL_KEY`)
+- **Component generation** — `generate_components.py` (`OPENAI_API_KEY`, `FAL_KEY`) + `blender_measure_glbs.py`
 - **Placement init** — `initialize_placement.py` builds `placement_init.json` and `iterations/001/assembly.json`
-- **Placement refinement** — `apply_critic.py` applies critic deltas to prior `assembly.json`
+- **Placement refinement** — `apply_critic.py` applies critic corrections directly to `assembly.json` world-space values
 - **Blender** — assemble scenes, render critique views, export USD
 
 ### Outputs
@@ -52,7 +52,7 @@ All intermediate files accumulate under `.intermediate/<asset>/<NNN>/`. See [Pip
 | Topic | Page | What it covers |
 |-------|------|---------------|
 | **Agentic loop** | [Agentic Loop](/architecture/agentic-loop) | Full pipeline flow, human gates, loop exit rules |
-| **Agents** | [Agents](/architecture/agents) | Orchestrator + subagents, permissions, prompts |
+| **Agents** | [Agents](/architecture/agents) | Orchestrator agent + subagents, permissions, prompts |
 | **Intermediate Representation** | [IR](/architecture/intermediate-representation) | Parts IR, Layout IR, Critique IR, data flow |
 | **Schemas** | [Schemas](/architecture/schemas) | JSON Schema validation for every artifact |
 | **Tool Scripts** | [Tools](/architecture/tools) | Deterministic Python and Blender scripts |
@@ -61,7 +61,7 @@ All intermediate files accumulate under `.intermediate/<asset>/<NNN>/`. See [Pip
 
 ```
 dexter/
-├── .opencode/agents/     # Agent prompts (orchestrator + subagents)
+├── .opencode/agents/     # Agent prompts (orchestrator agent + subagents)
 ├── config.yaml           # Pipeline knobs
 ├── opencode.json         # Agent definitions and permissions
 ├── schemas/              # JSON Schema files
