@@ -8,7 +8,7 @@ Dexter v0 is **prompt-orchestrated**: the model determines routing, branching, a
 
 Key principles for contributors:
 
-1. **Trust executable files over prose** — `opencode.json`, `.opencode/agents/*.md`, `config.yaml`, `tool_scripts/`, and `schemas/` are source of truth
+1. **Trust executable files over prose** — `opencode.json`, `.opencode/agents/*.md`, `configs/base.yaml`, `tool_scripts/`, and `schemas/` are source of truth
 2. **One artifact per subagent** — subagents write exactly one file and exit
 3. **Orchestrator owns control flow** — ordering, retries, gates, stop conditions
 4. **Schema gates everywhere** — validate JSON after every subagent write
@@ -43,7 +43,7 @@ The natural next step for production: replace prompt orchestration with an expli
 
 1. Read `AGENTS.md` and the relevant agent prompt in `.opencode/agents/`
 2. Make changes to prompts, schemas, scripts, or config
-3. Validate schemas: `python3 tool_scripts/validate_json.py --schema schemas/<name>.schema.json --data <test.json>`
+3. Validate schemas: `python3 tool_scripts/common.py --schema schemas/<name>.schema.json --data <test.json>`
 4. Run a test pipeline on a bundled input image
 5. Update documentation if behavior changes
 

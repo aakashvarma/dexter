@@ -8,7 +8,7 @@ Dexter is an **orchestrator-driven agentic pipeline**. One primary OpenCode agen
 
 ### User and orchestrator agent
 
-You provide a prompt — for example, *"build the dishwasher from `input_images/dishwasher.png`"*. The **orchestrator agent** is the only entrypoint (`opencode.json` → `orchestrator` agent). It reads `config.yaml`, probes `.intermediate/<asset>/<NNN>/` for existing artifacts, decides which step to run next, and invokes subagents through OpenCode's Task tool. Subagents never talk to each other; the orchestrator agent passes context between them.
+You provide a prompt — for example, *"build the dishwasher from `input_images/dishwasher.png`"*. The **orchestrator agent** is the only entrypoint (`opencode.json` → `orchestrator` agent). It reads `configs/base.yaml`, probes `.intermediate/<asset>/<NNN>/` for existing artifacts, decides which step to run next, and invokes subagents through OpenCode's Task tool. Subagents never talk to each other; the orchestrator agent passes context between them.
 
 ### Subagents
 
@@ -19,11 +19,11 @@ Each subagent writes **one artifact** and exits:
 | **analyze subagent** | Reads the source image and decomposes the object into moving parts | `parts.json` |
 | **critic subagent** | Scores rendered views against the source image and writes corrections | `critic.json` per iteration |
 
-Between subagent steps the orchestrator agent runs **tool scripts** directly: `generate_components.py`, `initialize_placement.py`, `apply_critic.py`, `blender_assemble.py`, `blender_render_views.py`, and finally `blender_export_usd.py`.
+Between subagent steps the orchestrator agent runs **tool scripts** directly: `generate_components.py`, `initialize_placement.py`, `update_placement.py`, `blender_assemble.py`, `blender_render_views.py`, and finally `blender_export_usd.py`.
 
 **Human gates**: you review `parts.json` before any 3D generation, and the best placement iteration before USD export.
 
-**Placement ↔ critic loop**: iteration 001's `assembly.json` comes from `initialize_placement.py`. Later iterations use `apply_critic.py` to apply critic corrections directly to world-space values. Each round assembles, renders four views, and the critic subagent scores the result. The loop stops when `config.yaml` exit conditions are met; the orchestrator agent keeps the best-scoring iteration.
+**Placement ↔ critic loop**: iteration 001's `assembly.json` comes from `initialize_placement.py`. Later iterations use `update_placement.py` to apply critic corrections directly to world-space values. Each round assembles, renders four views, and the critic subagent scores the result. The loop stops when `configs/base.yaml` exit conditions are met; the orchestrator agent keeps the best-scoring iteration.
 
 ### Model runtime
 
@@ -35,7 +35,7 @@ Deterministic code the orchestrator agent runs via bash:
 
 - **Component generation** — `generate_components.py` (`OPENAI_API_KEY`, `FAL_KEY`) + `blender_measure_glbs.py`
 - **Placement init** — `initialize_placement.py` builds `placement_init.json` and `iterations/001/assembly.json`
-- **Placement refinement** — `apply_critic.py` applies critic corrections directly to `assembly.json` world-space values
+- **Placement refinement** — `update_placement.py` applies critic corrections directly to `assembly.json` world-space values
 - **Blender** — assemble scenes, render critique views, export USD
 
 ### Outputs
@@ -45,13 +45,14 @@ The pipeline produces two deliverables:
 1. **Articulated asset** — per-part GLBs assembled under a parent-child hierarchy, exported as `robot.usda` (+ `textures/`) for Isaac Sim
 2. **Blender output** — `iterations/<B>/assembled.blend`, the best visual assembly from the critic loop
 
-All intermediate files accumulate under `.intermediate/<asset>/<NNN>/`. See [Pipeline Run](/getting-started/pipeline-run) for a step-by-step walkthrough with real outputs.
+All intermediate files accumulate under `.intermediate/<asset>/<NNN>/`. See [Pipeline Run](/getting-started/pipeline-run) for how to start or resume a run, and [Sample Run: Dishwasher](/sample-runs/dishwasher-example) for a full walkthrough with example outputs.
 
 ## Architecture sections
 
 | Topic | Page | What it covers |
 |-------|------|---------------|
-| **Agentic loop** | [Agentic Loop](/architecture/agentic-loop) | Full pipeline flow, human gates, loop exit rules |
+| **Agentic loop** | [Agentic Loop](/architecture/agentic-loop) | Pipeline flow, human gates, loop exit rules |
+| **End-to-end example** | [Sample Run](/sample-runs/dishwasher-example) | Inputs, outputs, and logic per agent and tool |
 | **Agents** | [Agents](/architecture/agents) | Orchestrator agent + subagents, permissions, prompts |
 | **Intermediate Representation** | [IR](/architecture/intermediate-representation) | Parts IR, Layout IR, Critique IR, data flow |
 | **Schemas** | [Schemas](/architecture/schemas) | JSON Schema validation for every artifact |
@@ -62,7 +63,7 @@ All intermediate files accumulate under `.intermediate/<asset>/<NNN>/`. See [Pip
 ```
 dexter/
 ├── .opencode/agents/     # Agent prompts (orchestrator agent + subagents)
-├── config.yaml           # Pipeline knobs
+├── configs/base.yaml           # Pipeline knobs (see configs/)
 ├── opencode.json         # Agent definitions and permissions
 ├── schemas/              # JSON Schema files
 ├── tool_scripts/         # Deterministic pipeline scripts

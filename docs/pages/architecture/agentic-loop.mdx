@@ -1,10 +1,8 @@
-# How Dexter Works
+# Agentic Loop
 
-Give Dexter a photo of a product. Within a single OpenCode session, it hands you back a fully articulated 3D asset — meshes, joints, textures, and a USD file ready to drop into NVIDIA Isaac Sim. This page walks through how that actually happens, step by step.
+Dexter turns a product photo into an articulated USD asset through one orchestrator agent, two subagents, and deterministic tool scripts. Two human gates pause the run before expensive 3D work and before final export.
 
-## The big picture
-
-Dexter is built around a single orchestrator agent. You talk to the orchestrator agent; it runs everything else. It sequences two specialist subagents, calls deterministic Python and Blender scripts, and pauses twice to ask for your sign-off before moving forward.
+For a concrete walkthrough with example files, see [Sample Run: Dishwasher](/sample-runs/dishwasher-example). For how to start or resume, see [Pipeline Run](/getting-started/pipeline-run).
 
 ```mermaid
 flowchart TD
@@ -14,7 +12,7 @@ flowchart TD
 
     subgraph placeLoop ["Placement ↔ Critic loop · iterations/NNN/"]
         init --> assemble["blender_assemble.py\n→ assembled.blend"]
-        apply["apply_critic.py\n→ assembly.json"] --> assemble
+        apply["update_placement.py\n→ assembly.json"] --> assemble
         assemble --> renderplan["render_views.json"]
         renderplan --> render["blender_render_views.py\n→ renders/"]
         render --> critique["critic subagent\n→ critic.json"]
@@ -26,46 +24,34 @@ flowchart TD
     gate2 --> usd["blender_export_usd.py\n→ robot.usda"]
 ```
 
----
+## Stage 1 — Part identification
 
-## Stage 1 — Understanding the object
+The **analyze** subagent reads `source.png` and writes `parts.json`: part names, descriptions, parent part names, joint types, and numeric placement (`world_size`, `world_center`, `euler_deg`). The orchestrator pauses for your review before any 3D API calls.
 
-The **analyze subagent** reads your source photo and writes `parts.json` — names, descriptions, parent links, joint types, and geometry hints. The orchestrator agent **stops here** for your review before spending API credits.
+## Stage 2 — Component generation
 
----
-
-## Stage 2 — Generating component assets
-
-`generate_components.py` runs once after parts approval. It generates isolated PNGs via OpenAI, GLBs via fal.ai, and measures each GLB into `component_dims.json`. Existing outputs are skipped on re-run.
-
----
+`generate_components.py` runs once after parts approval. It produces isolated PNGs (OpenAI), GLBs (fal.ai), and raw mesh measurements (`component_dims.json`). Existing outputs are skipped on re-run.
 
 ## Stage 3 — Initial placement
 
-`initialize_placement.py` combines `parts.json` geometry hints with measured mesh sizes to write `placement_init.json` and `iterations/001/assembly.json`. No LLM is involved — placement math is fully deterministic.
-
----
+`initialize_placement.py` reads world-space poses from `parts.json` and raw mesh sizes from `component_dims.json` to write `placement_init.json` and `iterations/001/assembly.json`. No LLM — scale/origin math is fully deterministic.
 
 ## Stage 4 — Render, critique, refine
 
 Each iteration:
 
-1. `blender_assemble.py` builds `assembled.blend` — it derives Blender-native scale and pivot origin from each link's `world_size`, `world_center`, and `rpy_deg` using raw mesh bounding boxes from `component_dims.json`
-2. The orchestrator agent writes `render_views.json`
+1. `blender_assemble.py` builds `assembled.blend` from `assembly.json`
+2. The orchestrator writes `render_views.json`
 3. `blender_render_views.py` renders four views (front, top, left, isometric)
-4. The **critic subagent** receives the renders, `assembly.json` (which contains per-part `world_size`, `world_center`, and `rpy_deg`), and the source image, then scores the result and writes corrections to `critic.json`
+4. The **critic** subagent scores the result and writes `critic.json`
 
-If the loop continues, `apply_critic.py` applies critic corrections directly to world-space values in the previous `assembly.json` to produce the next one. `locked` components are left unchanged. After a regression, the orchestrator agent can base the next iteration on the best-scoring layout instead of the most recent one.
+If the loop continues, `update_placement.py` applies critic corrections directly to world-space values in the next `assembly.json`. `locked` components are left unchanged. After a regression, the orchestrator can base the next iteration on the best-scoring layout instead of the most recent one.
 
-The loop stops when `config.yaml` exit conditions are met. The orchestrator agent then pauses for your placement review.
+The loop stops when `configs/base.yaml` exit conditions are met. The orchestrator then pauses for placement review.
 
----
-
-## Stage 5 — Exporting the final asset
+## Stage 5 — USD export
 
 After you approve a layout, `blender_export_usd.py` exports `robot.usda`, `textures/`, and `robot_prim_map.json`.
-
----
 
 ## Resuming interrupted runs
 
@@ -73,8 +59,8 @@ After you approve a layout, `blender_export_usd.py` exports `robot.usda`, `textu
 opencode run --agent orchestrator -- "resume .intermediate/dishwasher/001/"
 ```
 
-The orchestrator agent checks disk before every step and skips outputs that already exist and validate.
+The orchestrator checks disk before every step and skips outputs that already exist and validate.
 
 ---
 
-For agent details see [Agents](/architecture/agents). For tool scripts see [Tool Scripts](/architecture/tools).
+See [Agents](/architecture/agents) and [Tool Scripts](/architecture/tools) for per-step inputs and outputs.

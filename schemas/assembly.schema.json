@@ -1,10 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "assembly",
-  "description": "Articulated-asset intermediate representation. Consumed by blender_assemble.py and blender_export_usd.py.\n\nEach link stores world-space metric values. blender_assemble.py back-computes the Blender-native scale and origin.xyz at render time using component_dims.json:\n  blender_scale[axis]  = world_size[axis] / raw_mesh_size[axis]\n  origin_xyz[axis]     = world_center[axis] / parent_blender_scale[axis]\n                         − (R(rpy_deg) × (blender_scale × raw_mesh_center))[axis]\n\nFor the root link parent_blender_scale = [1, 1, 1]. Children must appear after their parent in the links array.",
+  "description": "Articulated-asset intermediate representation. Consumed by blender_assemble.py and blender_export_usd.py.\n\nEach part stores world-space metric values. blender_assemble.py back-computes the Blender-native node_scale and node_origin at render time using component_dims.json:\n  parent_world_scale   = world_size[parent] / raw_size[parent]   (accumulated; [1,1,1] for root)\n  node_scale[axis]     = world_size[axis] / (parent_world_scale[axis] × raw_size[axis])\n  node_origin[axis]    = world_center[axis] / parent_world_scale[axis]\n                         − (R(euler_deg) × (node_scale × raw_center))[axis]\n\nDividing by parent_world_scale compensates for Blender scale inheritance (children parented with matrix_parent_inverse=identity inherit the parent node_scale). Children must appear after their parent in the parts array.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["root", "robot_name", "links"],
+  "required": ["root", "robot_name", "parts"],
   "properties": {
     "root": {
       "type": "string",
@@ -14,13 +14,13 @@
       "type": "string",
       "description": "Name of the assembled object; used as the URDF <robot name>."
     },
-    "links": {
+    "parts": {
       "type": "array",
       "minItems": 1,
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["name", "parent", "visual_mesh", "collision_mesh", "world_size", "world_center", "rpy_deg"],
+        "required": ["name", "parent", "visual_mesh", "collision_mesh", "world_size", "world_center", "euler_deg"],
         "properties": {
           "name": {
             "type": "string",
@@ -28,7 +28,7 @@
           },
           "parent": {
             "type": ["string", "null"],
-            "description": "Name of the parent link; null for the root. Children must appear after their parent in the links array."
+            "description": "Name of the parent part; null for the root. Children must appear after their parent in the parts array."
           },
           "visual_mesh": {
             "type": "string",
@@ -43,21 +43,21 @@
             "items": {"type": "number", "exclusiveMinimum": 0},
             "minItems": 3,
             "maxItems": 3,
-            "description": "World bounding-box dimensions [W, D, H] in metres. blender_assemble.py derives blender_scale = world_size / raw_mesh_size from component_dims.json."
+            "description": "World bounding-box dimensions [W, D, H] in metres. blender_assemble.py derives node_scale = world_size / (parent_world_scale × raw_size) from component_dims.json."
           },
           "world_center": {
             "type": "array",
             "items": {"type": "number"},
             "minItems": 3,
             "maxItems": 3,
-            "description": "World-space centre [x, y, z] in metres of the mesh at its current pose (open for revolute/prismatic joints, closed otherwise). blender_assemble.py derives origin.xyz = world_center / parent_blender_scale − R(rpy_deg) × (blender_scale × raw_center)."
+            "description": "World-space centre [x, y, z] in metres of the mesh at its current pose (open for revolute/prismatic joints, closed otherwise). blender_assemble.py derives node_origin = world_center / parent_world_scale − R(euler_deg) × (node_scale × raw_center)."
           },
-          "rpy_deg": {
+          "euler_deg": {
             "type": "array",
             "items": {"type": "number"},
             "minItems": 3,
             "maxItems": 3,
-            "description": "Pivot rotation in degrees, XYZ Euler [roll, pitch, yaw]. For revolute doors: rpy_deg[2]<0 opens a left-hinged door; rpy_deg[2]>0 opens a right-hinged door. rpy_deg[0]<0 opens a bottom-hinged lid."
+            "description": "XYZ Euler rotation in degrees [roll, pitch, yaw] applied at the part's Blender node. For revolute doors: euler_deg[2]<0 opens a left-hinged door; euler_deg[2]>0 opens a right-hinged door. euler_deg[0]<0 opens a bottom-hinged lid; euler_deg[0]>0 opens a top-hinged lid."
           }
         }
       }

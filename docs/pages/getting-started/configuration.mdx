@@ -1,8 +1,8 @@
 # Configuration
 
-All pipeline knobs live in `config.yaml` at the repo root. The orchestrator reads this file at the start of every run. Agent definitions and permissions are in `opencode.json`.
+All pipeline knobs live in `configs/base.yaml`. The orchestrator reads this file at the start of every run. Agent definitions and permissions are in `opencode.json`.
 
-## config.yaml reference
+## base.yaml reference
 
 ```yaml
 paths:
@@ -121,8 +121,8 @@ Agent definitions, temperatures, prompt file paths, and permissions.
 | Agent | Mode | Writes | Bash allowed |
 |-------|------|--------|--------------|
 | `orchestrator` | primary | `.intermediate/**` | `python*`, `blender*`, `cp`, `mkdir` |
-| `analyze` | subagent | `parts.json` | `validate_json.py` only |
-| `critic` | subagent | `critic.json` | `validate_json.py` only |
+| `analyze` | subagent | `parts.json` | `common.py` only |
+| `critic` | subagent | `critic.json` | `common.py` only |
 
 Subagent prompts: `.opencode/agents/*.md`
 

@@ -1,10 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "placement_init",
-  "description": "Pre-computed scale and placement values produced by initialize_placement.py. Every value is derived from parts.json (world_dims, size_fraction, position_in_parent, hinge_side, slide_axis, open_angle_deg, pullout_fraction). Used to build iterations/001/assembly.json.",
+  "description": "Pre-computed scale and placement values produced by initialize_placement.py. World size, centre, and rotation come from parts.json; node_scale and node_origin are derived from component_dims.json. Used to build iterations/001/assembly.json.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["object", "root_name", "root_world_dims", "root_world_center", "root_scale", "parts"],
+  "required": ["object", "root_name", "root_world_size", "root_world_center", "root_node_scale", "parts"],
   "properties": {
 
     "object": {
@@ -17,7 +17,7 @@
       "description": "Name of the root part."
     },
 
-    "root_world_dims": {
+    "root_world_size": {
       "type": "array",
       "items": { "type": "number" },
       "minItems": 3,
@@ -33,18 +33,18 @@
       "description": "World-space centre of the root part. Typically [0, 0, height/2] (root sits on world floor at origin)."
     },
 
-    "root_scale": {
+    "root_node_scale": {
       "type": "array",
       "items": { "type": "number" },
       "minItems": 3,
       "maxItems": 3,
-      "description": "root_scale[axis] = root_world_dims[axis] / raw_root_size[axis]. Use directly as the root link's scale in assembly.json."
+      "description": "root_node_scale[axis] = root_world_size[axis] / raw_root_size[axis]. The value set on Blender's node obj.scale for the root part."
     },
 
     "config_used": {
       "type": "object",
       "additionalProperties": true,
-      "description": "Provenance for this file (e.g. source parts.json and root_world_dims used)."
+      "description": "Provenance for this file (e.g. source parts.json and root_world_size used)."
     },
 
     "parts": {
@@ -58,27 +58,27 @@
     "part_hint": {
       "type": "object",
       "additionalProperties": true,
-      "required": ["name", "joint_type", "child_scale", "closed_pose"],
+      "required": ["name", "joint_type", "node_scale", "pose"],
       "properties": {
 
         "name": { "type": "string" },
 
         "joint_type": { "type": "string" },
 
-        "parent_effective_scale": {
+        "parent_world_scale": {
           "type": "array",
           "items": { "type": "number" },
           "minItems": 3,
           "maxItems": 3,
-          "description": "The product of all ancestor scales along each axis. child_scale is applied on top of this."
+          "description": "Accumulated world scale of the parent part: parent_world_scale[axis] = parent_world_size[axis] / parent_raw_size[axis]. node_scale is divided by this to keep the child's rendered size correct despite Blender scale inheritance."
         },
 
-        "estimated_world_dims": {
+        "world_size": {
           "type": "array",
           "items": { "type": "number" },
           "minItems": 3,
           "maxItems": 3,
-          "description": "[W, D, H] in metres. Derived from size_fraction × parent_world_dims. Verify against source image; recompute child_scale if you change this."
+          "description": "[W, D, H] in metres from parts.json. Matches the world_size field in assembly.json."
         },
 
         "raw_size": {
@@ -89,48 +89,31 @@
           "description": "Raw GLB bounding-box size in Blender units (≈ metres) before any scale is applied."
         },
 
-        "child_scale": {
+        "node_scale": {
           "type": "array",
           "items": { "type": "number" },
           "minItems": 3,
           "maxItems": 3,
-          "description": "child_scale[axis] = estimated_world_dims[axis] / (parent_effective_scale[axis] × raw_size[axis]). Use this directly as scale in assembly.json. Recompute if you change estimated_world_dims."
+          "description": "node_scale[axis] = world_size[axis] / (parent_world_scale[axis] × raw_size[axis]). The value set on Blender's node obj.scale so the mesh renders at exactly world_size."
         },
 
-        "closed_pose": {
+        "pose": {
           "type": "object",
           "additionalProperties": true,
-          "required": ["world_center", "origin_xyz", "rpy_deg"],
+          "required": ["world_center", "node_origin", "euler_deg"],
           "properties": {
             "world_center": {
               "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3,
-              "description": "World-space centre of this part in its closed/default pose."
+              "description": "World-space centre from parts.json (source-image pose)."
             },
-            "origin_xyz": {
+            "node_origin": {
               "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3,
-              "description": "origin.xyz for assembly.json in PARENT LOCAL (unscaled) space."
+              "description": "Local offset on the parent's Blender empty (node_origin). Used by blender_assemble.py."
             },
-            "rpy_deg": {
+            "euler_deg": {
               "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3,
-              "description": "origin.rpy_deg for assembly.json. [0,0,0] for closed pose."
+              "description": "Rotation in degrees from parts.json (source-image pose)."
             }
-          }
-        },
-
-        "open_pose": {
-          "type": "object",
-          "additionalProperties": true,
-          "description": "Suggested open/extended pose. Only present for revolute and prismatic joints.",
-          "properties": {
-            "hinge_side":      { "type": "string" },
-            "open_angle_deg":  { "type": "number" },
-            "open_rpy_deg":    { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
-            "open_origin_xyz": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
-            "open_world_center": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
-            "slide_axis":      { "type": "string" },
-            "pullout_fraction": { "type": "number" },
-            "pull_distance_m": { "type": "number" },
-            "note":            { "type": "string" }
           }
         },
 

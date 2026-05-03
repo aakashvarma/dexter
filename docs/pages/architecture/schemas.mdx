@@ -1,11 +1,11 @@
 # Schemas
 
-Every pipeline artifact that flows between agents and tools is validated against a JSON Schema in `schemas/`. Validation is the gate that prevents bad data from propagating downstream.
+Every pipeline artifact is validated against a JSON Schema in `schemas/`. Validation prevents bad data from propagating downstream.
 
 ## Validation command
 
 ```bash
-python3 tool_scripts/validate_json.py \
+python3 tool_scripts/common.py \
   --schema schemas/<name>.schema.json \
   --data <path/to/artifact.json>
 ```
@@ -18,7 +18,7 @@ python3 tool_scripts/validate_json.py \
 | Schema | Artifact | Written by | When validated |
 |--------|----------|-----------|----------------|
 | `parts.schema.json` | `parts.json` | analyze subagent | After analyze step |
-| `assembly.schema.json` | `assembly.json` | initialize_placement.py / apply_critic.py | Each iteration |
+| `assembly.schema.json` | `assembly.json` | initialize_placement.py / update_placement.py | Each iteration |
 | `critic.schema.json` | `critic.json` | critic subagent | Each critique |
 | `placement_init.schema.json` | `placement_init.json` | initialize_placement.py | After placement init |
 | `render_views.schema.json` | `render_views.json` | orchestrator agent | Before rendering |
@@ -26,7 +26,7 @@ python3 tool_scripts/validate_json.py \
 
 ## Retry policy
 
-When validation fails, the orchestrator agent re-invokes the same subagent with errors appended. Repeats up to `loop.max_validation_retries` (default: 2).
+When validation fails, the orchestrator re-invokes the same subagent with errors appended. Repeats up to `loop.max_validation_retries` (default: 2).
 
 ## parts.schema.json
 
@@ -34,40 +34,36 @@ Top-level: `object` (string), `parts` (array, min 1).
 
 Per part — always required: `name`, `description`, `parent`, `joint_type`.
 
-Root part requires: `world_dims` `[w,d,h]` in metres.
+Root part requires: `world_size` `[w,d,h]` in metres.
 
-Non-root parts require: `size_fraction` `[w,d,h]`, `position_in_parent` (string).
-
-Revolute joints require: `hinge_side` (`left`|`right`|`top`|`bottom`), `open_angle_deg` (number).
-
-Prismatic joints require: `slide_axis` (`-y`|`+y`|`-x`|`+x`|`+z`|`-z`), `pullout_fraction` (number 0–1).
+Non-root parts require: `world_size` `[w,d,h]`, `world_center` `[x,y,z]`, `euler_deg` `[rx,ry,rz]`.
 
 ## assembly.schema.json
 
-Top-level: `root`, `robot_name`, `links` (array, min 1).
+Top-level: `root`, `robot_name`, `parts` (array, min 1).
 
-Per link — all required: `name`, `parent`, `visual_mesh`, `collision_mesh`, `world_size`, `world_center`, `rpy_deg`.
+Per part — all required: `name`, `parent`, `visual_mesh`, `collision_mesh`, `world_size`, `world_center`, `euler_deg`.
 
-- `world_size` — `[W, D, H]` in metres (all axes > 0). `blender_assemble.py` derives `blender_scale = world_size / raw_mesh_size`.
-- `world_center` — `[x, y, z]` in metres, world-space centre at the current pose.
-- `rpy_deg` — `[rx, ry, rz]` degrees, XYZ Euler. Negative Z opens a left-hinged door; positive Z opens a right-hinged door; negative X drops a bottom-hinged door forward.
+- `world_size` — `[W, D, H]` in metres (all axes > 0)
+- `world_center` — `[x, y, z]` in metres, world-space centre at the current pose
+- `euler_deg` — `[rx, ry, rz]` degrees, XYZ Euler. Negative Z opens a left-hinged door; positive Z opens a right-hinged door; negative X drops a bottom-hinged door forward
 
 ## critic.schema.json
 
 Required: `iteration` (int ≥1), `score` (0–100), `pass` (bool), `summary`, `issues`, `per_view_notes`.
 
-Per issue — required: `component`, `problem`. Optional corrections:
+Per issue — required: `part`, `problem`. Optional corrections:
 
-- `locked` (bool) — skip this component entirely in `apply_critic.py`
+- `locked` (bool) — skip this part in `update_placement.py`
 - `corrected_world_size` `[W, D, H]` — target world dimensions in metres
 - `corrected_world_center` `[x, y, z]` — target world-space centre in metres
-- `suggested_rotation_delta` `[drx, dry, drz]` — degrees to add to `rpy_deg`
+- `suggested_rotation_delta` `[drx, dry, drz]` — degrees to add to `euler_deg`
 
 ## placement_init.schema.json
 
-Required: `object`, `root_name`, `root_world_dims`, `root_world_center`, `root_scale`, `parts`.
+Required: `object`, `root_name`, `root_world_size`, `root_world_center`, `root_node_scale`, `parts`.
 
-Per part hint: `name`, `joint_type`, `child_scale`, `closed_pose`. Optional: `open_pose`, `children` (recursive).
+Per part hint: `name`, `joint_type`, `node_scale`, `pose` (`world_center`, `node_origin`, `euler_deg`). Optional: `children` (recursive).
 
 ## render_views.schema.json
 
@@ -88,12 +84,12 @@ Per part: `size`, `center`, `min`, `max` — each `[x,y,z]` arrays in raw GLB co
 ```bash
 RUN=.intermediate/dishwasher/001
 
-python3 tool_scripts/validate_json.py --schema schemas/parts.schema.json --data $RUN/parts.json
-python3 tool_scripts/validate_json.py --schema schemas/placement_init.schema.json --data $RUN/placement_init.json
+python3 tool_scripts/common.py --schema schemas/parts.schema.json --data $RUN/parts.json
+python3 tool_scripts/common.py --schema schemas/placement_init.schema.json --data $RUN/placement_init.json
 
 for iter in $RUN/iterations/*/; do
-  python3 tool_scripts/validate_json.py --schema schemas/assembly.schema.json --data $iter/assembly.json
-  python3 tool_scripts/validate_json.py --schema schemas/critic.schema.json --data $iter/critic.json
+  python3 tool_scripts/common.py --schema schemas/assembly.schema.json --data $iter/assembly.json
+  python3 tool_scripts/common.py --schema schemas/critic.schema.json --data $iter/critic.json
 done
 ```
 

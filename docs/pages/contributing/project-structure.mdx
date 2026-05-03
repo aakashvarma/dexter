@@ -8,7 +8,8 @@ dexter/
 │       ├── analyze.md           # Analyze subagent — parts decomposition
 │       └── critic.md            # Critic subagent — critique IR writer
 │
-├── config.yaml                  # Pipeline knobs (loops, fal, render, USD)
+├── configs/
+│   └── base.yaml                # Pipeline knobs (loops, fal, render, USD)
 ├── opencode.json                # Agent definitions, permissions, prompt paths
 ├── AGENTS.md                    # Agent-facing pipeline semantics (OpenCode /init)
 │
@@ -23,12 +24,12 @@ dexter/
 ├── tool_scripts/                # Deterministic pipeline scripts
 │   ├── generate_components.py
 │   ├── initialize_placement.py
-│   ├── apply_critic.py
+│   ├── update_placement.py
 │   ├── blender_measure_glbs.py
 │   ├── blender_assemble.py
 │   ├── blender_render_views.py
 │   ├── blender_export_usd.py
-│   └── validate_json.py
+│   └── common.py
 │
 ├── input_images/                # Bundled source photos
 │   ├── dishwasher.png
@@ -56,7 +57,7 @@ Defines all agents: mode (primary/subagent), temperature, prompt file path, and 
 
 The orchestrator agent has broad bash permissions (`python*`, `blender*`). Subagents are tightly scoped.
 
-### config.yaml
+### configs/base.yaml (`base.yaml`)
 
 Read by the orchestrator agent at run start. Contains:
 
@@ -111,7 +112,7 @@ Gitignored. Structure per run:
 
 | Missing | Why |
 |---------|-----|
-| Test suite | No CI; validate with `validate_json.py` + manual runs |
+| Test suite | No CI; validate with `common.py` + manual runs |
 | Python package manifest | Only `requirements.txt` |
 | Pipeline driver script | OpenCode orchestrator agent is the only entrypoint |
 | API keys | Environment variables only |

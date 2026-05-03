@@ -37,7 +37,7 @@ From `requirements.txt`:
 | `openai` | latest | OpenAI `images.edit()` for component PNGs |
 | `requests` | latest | HTTP downloads (GLB files from fal.ai) |
 | `jsonschema` | latest | JSON Schema validation gate |
-| `pyyaml` | latest | `config.yaml` parsing |
+| `pyyaml` | latest | `configs/base.yaml` parsing |
 
 ```bash
 pip install -r requirements.txt
@@ -46,7 +46,7 @@ python3 -c "import fal_client, openai, jsonschema, yaml; print('OK')"
 
 ### Blender
 
-Blender must be callable as `blender` on your `PATH`, or set `paths.blender_binary` in `config.yaml`:
+Blender must be callable as `blender` on your `PATH`, or set `paths.blender_binary` in `configs/base.yaml`:
 
 ```bash
 blender --version
@@ -129,7 +129,7 @@ test -n "$FAL_KEY" && echo "FAL_KEY set" || echo "MISSING: FAL_KEY"
 opencode --version
 
 # JSON validator
-python3 tool_scripts/validate_json.py --help
+python3 tool_scripts/common.py --help
 ```
 
 Next: [Installation](/getting-started/installation)

@@ -31,7 +31,7 @@
       "prompt": "{file:./.opencode/agents/analyze.md}",
       "permission": {
         "edit": {"*": "deny", ".intermediate/**": "allow"},
-        "bash": {"*": "deny", "*validate_json.py*": "allow"},
+        "bash": {"*": "deny", "*common.py*": "allow"},
         "read": "allow",
         "glob": "allow",
         "list": "allow",
@@ -47,7 +47,7 @@
       "prompt": "{file:./.opencode/agents/critic.md}",
       "permission": {
         "edit": {"*": "deny", ".intermediate/**": "allow"},
-        "bash": {"*": "deny", "*validate_json.py*": "allow"},
+        "bash": {"*": "deny", "*common.py*": "allow"},
         "read": "allow",
         "glob": "allow",
         "list": "allow",

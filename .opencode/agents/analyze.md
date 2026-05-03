@@ -9,6 +9,37 @@ other, plus one base part.
 
 ---
 
+## World coordinate system
+
+Every non-root part needs numeric placement in **world metres** matching the
+pose shown in the source image.
+
+- **+X** — right
+- **+Y** — back (away from the viewer)
+- **+Z** — up
+- The **front** of the object faces **−Y** (toward the viewer in a front product photo)
+- The root part sits on the floor: its centre is at `[0, 0, height/2]` (computed
+  automatically — you only set `world_size` on the root)
+
+Use the root `world_size` as your ruler. Estimate child sizes and centres relative
+to that box.
+
+**Root box reference** (root `world_size` = `[W, D, H]`, centre at `[0, 0, H/2]`):
+
+| Location | Approximate world centre |
+|----------|--------------------------|
+| Front face centre | `[0, −D/2, H/2]` |
+| Back face centre | `[0, +D/2, H/2]` |
+| Left edge, mid-height | `[−W/2, 0, H/2]` |
+| Right edge, mid-height | `[+W/2, 0, H/2]` |
+| Floor centre (front) | `[0, −D/2, 0]` |
+| Top centre | `[0, 0, H]` |
+
+For a part on the front face (door, drawer): place its centre slightly **in front**
+of the parent front face — `y ≈ −D/2 + part_depth/2`.
+
+---
+
 ## Fields to output for every part
 
 ### `name`
@@ -20,11 +51,11 @@ Descriptive unique snake_case name usable as a filename — e.g. `front_door`,
 ### `description`
 
 One short sentence identifying WHAT the part is and WHERE it sits. Used only for
-image generation — describe what to visually isolate, not geometry. Do not repeat
-data already captured in `size_fraction` or `position_in_parent`.
+image generation — describe what to visually isolate, not numeric geometry. Do not
+repeat data already captured in `world_size`, `world_center`, or `euler_deg`.
 
 Good: "The left hinged door on the upper-left front of the cabinet."
-Bad: "The left door, occupying the left half of the cabinet front at 65% height."
+Bad: "The left door at world centre [−0.15, −0.28, 0.65]."
 
 ### `parent`
 
@@ -34,129 +65,57 @@ The parent part's name, or `null` for the single root/base part.
 
 One of: `fixed`, `revolute`, `prismatic`, `continuous`, `floating`, `planar`.
 
-### `world_dims`   ← **REQUIRED for the root part only**
+### `world_size`   ← **REQUIRED for every part**
 
-Real-world size of the root/base part in metres: `[width_m, depth_m, height_m]`.
-Estimate from the source image and object type (e.g. a standard dishwasher cabinet
-≈ 0.60 × 0.60 × 0.85 m). Optional on non-root parts to override `size_fraction`
-with exact metre dimensions when `size_fraction` is not accurate enough.
+Real-world size in metres: `[width_m, depth_m, height_m]`.
 
-### `size_fraction`   ← **REQUIRED for every non-root part**
+- **Root**: estimate overall object dimensions from the image and object type
+  (e.g. standard dishwasher cabinet ≈ 0.60 × 0.60 × 0.85 m).
+- **Non-root**: estimate each part's own dimensions. Thin panels (doors, lids):
+  depth 0.04–0.08 m. Drawers: depth close to parent depth when closed.
 
-How large this part is as a fraction of its **parent's** world size:
-`[width_fraction, depth_fraction, height_fraction]`
+**Reference examples:**
 
-Estimate these by looking at the image:
+| Part | world_size `[W, D, H]` |
+|------|------------------------|
+| Dishwasher cabinet (root) | [0.60, 0.60, 0.85] |
+| Full-width dishwasher door | [0.60, 0.04, 0.51] |
+| Fridge door (half-width) | [0.45, 0.05, 1.40] |
+| Freezer drawer | [0.90, 0.55, 0.30] |
+| Oven door | [0.60, 0.06, 0.40] |
+| Upper dish rack | [0.52, 0.50, 0.18] |
 
-- **width_fraction**: how wide is this part compared to its parent?
-- **depth_fraction**: how deep/thick is this part compared to its parent?
-  - Doors, lids: thin → 0.04–0.12 (they are essentially flat panels)
-  - Drawers (closed): deep → 0.7–1.0 (fill most of parent depth)
-  - Fixed sub-bodies: medium → 0.5–1.0
-- **height_fraction**: how tall is this part compared to its parent?
+### `world_center`   ← **REQUIRED for every non-root part**
 
-Fractions can exceed 1.0 if the part extends beyond the parent in that dimension.
+World-space centre `[x, y, z]` in metres for where the part sits **in the source
+image pose**. Estimate by comparing the part's position and size to the root box.
 
-**Reference examples for common assets:**
+Examples (dishwasher root `[0.60, 0.60, 0.85]`, centre `[0, 0, 0.425]`):
 
-| Part                        | size_fraction         |
-|-----------------------------|-----------------------|
-| Fridge door (half-width)    | [0.50, 0.06, 0.65]    |
-| Fridge freezer drawer       | [1.00, 1.00, 0.35]    |
-| Oven door (full-width)      | [1.00, 0.08, 0.45]    |
-| Dishwasher door             | [1.00, 0.06, 0.60]    |
-| Laptop screen (on base)     | [1.00, 0.03, 0.90]    |
-| Chest lid                   | [1.00, 1.00, 0.15]    |
-| Desk top-drawer             | [0.80, 0.90, 0.20]    |
-| Robot arm forearm segment   | [0.30, 0.30, 0.55]    |
-| Stapler upper jaw           | [1.00, 1.00, 0.35]    |
-| Car door (one of four)      | [0.30, 0.90, 0.70]    |
-| Microwave door              | [1.00, 0.06, 1.00]    |
+| Part / pose | world_center |
+|-------------|--------------|
+| Closed front door | `[0, −0.28, 0.255]` |
+| Door open ~45° (bottom hinge) | `[0, −0.22, 0.18]` (centre shifts as it swings) |
+| Drawer pulled halfway out | `[0, −0.40, 0.12]` |
+| Upper rack inside cavity | `[0, −0.05, 0.65]` |
 
-### `position_in_parent`   ← **REQUIRED for every non-root part**
+### `euler_deg`   ← **REQUIRED for every non-root part**
 
-Where the part sits within its parent. Use ONE or TWO of these keywords:
+XYZ Euler rotation in **degrees** for the pose shown in the source image:
+`[rx, ry, rz]`. Use `[0, 0, 0]` when shut or aligned with the parent.
 
-- **Horizontal (X)**: `left` · `center-left` · `center` · `center-right` · `right`
-- **Vertical (Z)**: `bottom` · `lower` · `middle` · `upper` · `top`
-- Combine: `bottom-center`, `upper-left`, `bottom-right`, etc.
+| Part / motion | Example `euler_deg` |
+|---------------|---------------------|
+| Closed / aligned | `[0, 0, 0]` |
+| Bottom-hinged door open ~45° forward | `[−45, 0, 0]` |
+| Left-hinged door open ~90° | `[0, 0, −90]` |
+| Right-hinged door open ~90° | `[0, 0, 90]` |
+| Top-hinged lid open backward | `[45, 0, 0]` |
 
-**Rules:**
+For spin-only joints (lazy susan), use `joint_type: continuous` instead.
 
-- Use `left` / `right` when the part is clearly on one side of the parent.
-- Use `bottom` / `top` when the part occupies only a vertical band of the parent.
-- Use `center` when the part is centered or spans the full width/height.
-- For a multi-door system: give each door an explicit `left` or `right`.
-- The **Y (depth) position** is derived automatically from `hinge_side`/`slide_axis`
-  and does NOT belong in this field.
-
-**Examples:**
-
-| Part                      | position_in_parent  |
-|---------------------------|---------------------|
-| Left fridge door          | left                |
-| Right fridge door         | right               |
-| Freezer drawer            | bottom-center       |
-| Oven door (bottom-hinged) | center              |
-| Laptop screen             | top                 |
-| Chest lid                 | top                 |
-| Desk single drawer        | bottom-center       |
-| Robot arm forearm         | top                 |
-| Microwave door            | center              |
-| Car left front door       | upper-left          |
-
-### `hinge_side`   ← **REQUIRED for `revolute` joints only**
-
-The physical **edge** of this part where the hinge/pivot is attached.
-
-| Value    | Meaning                                          | Rotation axis |
-|----------|--------------------------------------------------|---------------|
-| `left`   | Hinge on the part's LEFT vertical edge           | Z-axis        |
-| `right`  | Hinge on the part's RIGHT vertical edge          | Z-axis        |
-| `bottom` | Hinge on the BOTTOM horizontal edge              | X-axis        |
-| `top`    | Hinge on the TOP horizontal edge                 | X-axis        |
-
-**Decision guide:**
-
-- Cabinet/fridge door: the OUTBOARD edge is the hinge. Leftmost door → `left`;
-  rightmost door → `right`.
-- Oven door, dishwasher door, laptop screen: hinge is at the BOTTOM → `bottom`.
-- Chest freezer lid, car hood (rear-hinged): hinge is at the TOP → `top`.
-- Microwave door: typically `right` (hinged on its right edge, opens leftward).
-- For a joint that rotates around the object's vertical axis (yaw), use
-  `joint_type: continuous` instead — no `hinge_side` needed.
-
-### `slide_axis`   ← **REQUIRED for `prismatic` joints only**
-
-The world-space direction the part moves when it opens/extends.
-
-| Value | Direction                    | Common example                      |
-|-------|------------------------------|-------------------------------------|
-| `-y`  | Toward viewer / forward      | Kitchen drawer, desk drawer         |
-| `+z`  | Upward                       | Oven rack lifted out, elevator car  |
-| `-z`  | Downward                     | Drop-down panel                     |
-| `+x`  | To the right                 | Side-sliding tray                   |
-| `-x`  | To the left                  | Left-sliding panel                  |
-| `+y`  | Away from viewer / backward  | Rear-opening magazine well          |
-
-### `open_angle_deg`   ← **REQUIRED for `revolute` joints only**
-
-How many degrees the part is open in the source image:
-
-- `0` — fully closed
-- `45`–`90` — partially or fully open (common for product photos)
-- `90` — perpendicular to the closed position
-
-Look at the image: if a door is shown open, estimate the angle. If closed, use `0`.
-
-### `pullout_fraction`   ← **REQUIRED for `prismatic` joints only**
-
-How far the part is extended in the source image, as a fraction of its full
-travel along `slide_axis`:
-
-- `0` — fully closed / flush
-- `0.3`–`0.5` — partially extended
-- `1.0` — fully extended
+When a door swings open, both `euler_deg` **and** `world_center` must reflect the
+new pose — the centre moves with the rotation.
 
 ---
 
@@ -177,34 +136,32 @@ Write the result to the exact path given in the run message, conforming to
 
 ```json
 {
-  "object": "object_name",
+  "object": "dishwasher",
   "parts": [
     {
-      "name": "base_body",
-      "description": "The main structural body of the object.",
+      "name": "cabinet_body",
+      "description": "The main dishwasher cabinet with insulated walls and control panel on top.",
       "parent": null,
       "joint_type": "fixed",
-      "world_dims": [0.60, 0.50, 1.00]
+      "world_size": [0.60, 0.60, 0.85]
     },
     {
-      "name": "hinged_panel",
-      "description": "A panel on the front of the base body that swings open on the left hinge.",
-      "parent": "base_body",
+      "name": "front_door",
+      "description": "The full-width drop-down door on the front of the cabinet.",
+      "parent": "cabinet_body",
       "joint_type": "revolute",
-      "size_fraction": [1.00, 0.05, 0.70],
-      "position_in_parent": "upper-center",
-      "hinge_side": "left",
-      "open_angle_deg": 0
+      "world_size": [0.60, 0.04, 0.51],
+      "world_center": [0, -0.28, 0.255],
+      "euler_deg": [0, 0, 0]
     },
     {
-      "name": "sliding_tray",
-      "description": "A tray at the bottom of the base body that slides outward along the -Y axis.",
-      "parent": "base_body",
-      "joint_type": "prismatic",
-      "size_fraction": [0.90, 0.80, 0.20],
-      "position_in_parent": "bottom-center",
-      "slide_axis": "-y",
-      "pullout_fraction": 0
+      "name": "lower_dish_rack",
+      "description": "The lower wire dish rack inside the cabinet cavity.",
+      "parent": "cabinet_body",
+      "joint_type": "fixed",
+      "world_size": [0.52, 0.50, 0.18],
+      "world_center": [0, -0.05, 0.30],
+      "euler_deg": [0, 0, 0]
     }
   ]
 }
@@ -213,7 +170,7 @@ Write the result to the exact path given in the run message, conforming to
 After writing, validate the file you just wrote:
 
 ```
-python3 tool_scripts/validate_json.py --schema schemas/parts.schema.json --data <run_dir>/parts.json
+python3 tool_scripts/common.py --schema schemas/parts.schema.json --data <run_dir>/parts.json
 ```
 
 Fix any reported errors and re-validate before finishing.

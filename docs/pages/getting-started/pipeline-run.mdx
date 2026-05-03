@@ -1,114 +1,8 @@
 # Pipeline Run
 
-This page is the end-to-end guide for running Dexter. It covers the agentic loop, the output directory layout, how to start a run, and a detailed walkthrough of a real **dishwasher** run (`.intermediate/dishwasher/001/`).
+How to start, resume, and monitor a Dexter run. For what each agent and tool does step by step — with a concrete dishwasher example — see [Sample Run: Dishwasher](/sample-runs/dishwasher-example).
 
-## The agentic loop
-
-Dexter has no standalone Python driver. The **orchestrator agent** sequences two subagents and deterministic tool scripts, pausing at two human gates.
-
-```mermaid
-flowchart TD
-    analyze["analyze subagent\nsource.png → parts.json"] --> gate1{"Human gate 1:\nconfirm parts.json"}
-    gate1 --> components["generate_components.py\n→ component_images/\ncomponent_glbs/\ncomponent_dims.json"]
-    components --> init["initialize_placement.py\n→ placement_init.json\niterations/001/assembly.json"]
-
-    subgraph placeLoop ["Placement ↔ Critic loop · iterations/NNN/"]
-        init --> assemble["blender_assemble.py\n→ assembled.blend"]
-        apply["apply_critic.py\n→ assembly.json"] --> assemble
-        assemble --> renderplan["render_views.json"]
-        renderplan --> render["blender_render_views.py\n→ renders/"]
-        render --> critique["critic subagent\n→ critic.json"]
-        critique --> decide{"Stop?"}
-        decide -->|no| apply
-    end
-
-    decide -->|yes, best B| gate2{"Human gate 2:\nconfirm placement"}
-    gate2 --> usd["blender_export_usd.py\n→ robot.usda"]
-```
-
-| Gate | When | What you review |
-|------|------|-----------------|
-| **Human gate 1** | After `parts.json` | Part names, descriptions, joint types, geometry hints |
-| **Human gate 2** | After placement loop | Best iteration renders, critic score, `assembled.blend` |
-
-The orchestrator agent **resumes from disk**: if an artifact already exists and validates, that step is skipped unless you ask to redo it.
-
-Loop exit (from `config.yaml`): stop when `score >= score_threshold` and `N >= min_loops`, when `N >= max_loops`, or when the score has not improved for `no_improvement_patience` consecutive iterations. The best-scoring iteration is kept even if a later one regresses.
-
-See [Agentic Loop](/architecture/agentic-loop) for full stage semantics.
-
----
-
-## Output directory structure
-
-Every run writes to `.intermediate/<asset>/<NNN>/`. The tree is gitignored and is the single source of truth for run state.
-
-### Run root layout
-
-```
-.intermediate/<asset>/<NNN>/
-│
-├── source.png                         # copied input image
-│
-├── parts.json                         # Parts IR (analyze subagent)
-├── component_dims.json                # raw GLB bounding boxes
-├── placement_init.json                # pre-computed scales and poses
-│
-├── component_images/                  # isolated component PNGs
-│   ├── dishwasher_cabinet.png
-│   ├── front_door.png
-│   ├── upper_dish_rack.png
-│   └── lower_dish_rack.png
-│
-├── component_glbs/                    # 3D meshes from fal.ai
-│   ├── dishwasher_cabinet.glb
-│   ├── front_door.glb
-│   ├── upper_dish_rack.glb
-│   └── lower_dish_rack.glb
-│
-├── iterations/
-│   ├── 001/
-│   │   ├── assembly.json              # Layout IR (world_size, world_center, rpy_deg per link)
-│   │   ├── assembled.blend            # Blender scene
-│   │   ├── render_views.json          # camera plan (orchestrator agent)
-│   │   ├── renders/                   # front, top, left, isometric PNGs
-│   │   └── critic.json                # Critique IR
-│   ├── 002/ … 006/
-│   └── <best B>/
-│
-├── robot.usda                         # final USD deliverable
-├── robot_prim_map.json                # Blender name → USD prim path
-└── textures/                          # material images for Isaac Sim
-```
-
-### Naming conventions
-
-| Pattern | Example | Meaning |
-|---------|---------|---------|
-| `<asset>` | `dishwasher` | Object name from `parts.json` → `object` field |
-| `<NNN>` | `001` | Zero-padded run number, auto-incremented |
-| Part stems | `front_door` | Used for PNG, GLB, and assembly link names |
-| Iteration dirs | `001` … `006` | One placement ↔ critic round each |
-
-### Artifact lifecycle
-
-| Artifact | Produced in step | Consumed by |
-|----------|-------------------|-------------|
-| `source.png` | Run start (copy) | analyze subagent, generate_components |
-| `parts.json` | Step 1 | generate_components, initialize_placement |
-| `component_images/` | Step 2 | (fal.ai input) |
-| `component_glbs/` | Step 2 | blender_assemble |
-| `component_dims.json` | Step 2 | initialize_placement, blender_assemble |
-| `placement_init.json` | Step 3 | iteration 001 assembly |
-| `iterations/N/assembly.json` | Step 3–4 | blender_assemble, critic subagent |
-| `iterations/N/assembled.blend` | Step 4 | blender_render_views, USD export |
-| `iterations/N/renders/` | Step 4 | critic subagent |
-| `iterations/N/critic.json` | Step 4 | apply_critic (iteration 2+) |
-| `robot.usda` | Step 5 | Isaac Sim |
-
----
-
-## Starting a run
+## Start a run
 
 ### CLI (headless)
 
@@ -123,28 +17,15 @@ cd /path/to/dexter
 opencode
 ```
 
-Press **Tab** or type `/agents` and select **orchestrator**:
-
-![Select the orchestrator agent in OpenCode](/assets/images/opencode/select-agent.png)
-
-Useful slash commands:
-
-| Command | Purpose |
-|---------|---------|
-| `/agents` | Switch to `orchestrator` |
-| `/connect` | Re-authenticate model provider |
-| `/init` | Guided `AGENTS.md` setup |
-| `/new` | New session |
-
-![OpenCode slash commands](/assets/images/opencode/slash-commands.png)
-
-Then type your task, for example:
+Press **Tab** or type `/agents` and select **orchestrator**, then describe your task:
 
 ```
 build the dishwasher from input_images/dishwasher.png
 ```
 
-### Resume or iterate
+Useful slash commands: `/agents` (switch agent), `/connect` (re-authenticate), `/init` (setup), `/new` (new session).
+
+## Resume or iterate
 
 ```bash
 # Resume interrupted run
@@ -157,7 +38,51 @@ opencode run --agent orchestrator -- "parts confirmed, continue .intermediate/di
 opencode run --agent orchestrator -- "run 3 more placement iterations for .intermediate/dishwasher/001/"
 ```
 
-### Monitor progress
+The orchestrator probes `.intermediate/<asset>/<NNN>/` before every step and skips outputs that already exist and validate.
+
+## Human gates
+
+| Gate | When | What you review |
+|------|------|-----------------|
+| **Parts** | After `parts.json` | Part names, descriptions, joint types, placement numbers |
+| **Placement** | After the critic loop | Best iteration renders, critic score, `assembled.blend` |
+
+## Loop exit
+
+From `configs/base.yaml` `loop.*`: stop when `score >= score_threshold` and `N >= min_loops`, when `N >= max_loops`, or when the score has not improved for `no_improvement_patience` consecutive iterations. The best-scoring iteration is kept even if a later one regresses.
+
+## Output directory
+
+Every run writes to `.intermediate/<asset>/<NNN>/` (gitignored). This tree is the source of truth for run state.
+
+```
+.intermediate/<asset>/<NNN>/
+├── source.png
+├── parts.json
+├── component_dims.json
+├── placement_init.json
+├── component_images/          # one PNG per part
+├── component_glbs/              # one GLB per part
+├── iterations/
+│   └── NNN/
+│       ├── assembly.json
+│       ├── assembled.blend
+│       ├── render_views.json
+│       ├── renders/             # front, top, left, isometric
+│       └── critic.json
+├── robot.usda                   # final deliverable
+├── robot_prim_map.json
+└── textures/
+```
+
+| Pattern | Example | Meaning |
+|---------|---------|---------|
+| `<asset>` | `dishwasher` | From `parts.json` → `object` |
+| `<NNN>` | `001` | Zero-padded run number |
+| Part stems | `front_door` | PNG, GLB, and assembly part names |
+| Iteration dirs | `001` … `006` | One placement ↔ critic round each |
+
+## Monitor progress
 
 ```bash
 RUN=.intermediate/dishwasher/001
@@ -165,236 +90,29 @@ RUN=.intermediate/dishwasher/001
 ls $RUN/parts.json $RUN/component_glbs/ $RUN/placement_init.json
 ls $RUN/iterations/
 
-# Latest critic score
 cat $RUN/iterations/005/critic.json | python3 -c \
   "import json,sys; d=json.load(sys.stdin); print(f'Iter {d[\"iteration\"]}: {d[\"score\"]} — {d[\"summary\"]}')"
 
-ls $RUN/robot.usda 2>/dev/null || echo "USD not yet exported (placement gate not passed)"
+ls $RUN/robot.usda 2>/dev/null || echo "USD not yet exported"
 ```
-
----
-
-## Walkthrough: dishwasher run
-
-The following traces `.intermediate/dishwasher/001/` — a real run on `input_images/dishwasher.png`. Four parts were identified: **dishwasher_cabinet**, **front_door**, **upper_dish_rack**, **lower_dish_rack**.
-
-| Stage | What happens | Walkthrough steps |
-|-------|--------------|-------------------|
-| **1 — Parts** | Analyze subagent lists moving parts; you review | Step 1 |
-| **2 — Components** | Prompts built; one PNG + GLB per part; dims measured | Step 2 |
-| **3 — Init** | Placement init writes first assembly.json | Step 3 |
-| **4 — Loop** | Renders compared; critic subagent suggests fixes; loop repeats | Step 4 |
-| **5 — Export** | Approved blend → USD for Isaac Sim | Step 5 |
-
-### Step 1 — Part identification (analyze subagent)
-
-The analyze subagent reads your photo and proposes which parts the dishwasher is made of. It writes `parts.json` with names, descriptions, joints, geometry hints, and the root part's real-world dimensions. The orchestrator agent stops here so you can check the list before spending API credits on 3D generation.
-
-**Who:** analyze subagent  
-**Human gate:** Yes — review before any 3D generation  
-**Outputs:**
-
-| File | Description |
-|------|-------------|
-| `source.png` | Copy of `input_images/dishwasher.png` |
-| `parts.json` | Parts IR — kinematic tree and geometry hints |
-
-![Source input image](/assets/images/dexter/run/source.png)
-
-The analyze subagent proposed:
-
-| Part | `joint_type` | Parent | Key fields |
-|------|-------------|--------|------------|
-| `dishwasher_cabinet` | `fixed` | — (root) | `world_dims: [0.60, 0.60, 0.85]` |
-| `front_door` | `revolute` | cabinet | `hinge_side: bottom`, `open_angle_deg: 0` |
-| `upper_dish_rack` | `prismatic` | cabinet | `slide_axis: -y`, `pullout_fraction: 0` |
-| `lower_dish_rack` | `prismatic` | cabinet | `slide_axis: -y`, `pullout_fraction: 0` |
-
-Example excerpt from `parts.json`:
-
-```json
-{
-  "name": "front_door",
-  "description": "The drop-down front door at the lower front of the dishwasher.",
-  "parent": "dishwasher_cabinet",
-  "joint_type": "revolute",
-  "size_fraction": [1.0, 0.08, 0.72],
-  "position_in_parent": "center",
-  "hinge_side": "bottom",
-  "open_angle_deg": 0
-}
-```
-
-**What to check at human gate 1:** specific part names (not `body` or `part_1`), accurate descriptions, plausible `size_fraction` and `hinge_side` / `slide_axis`.
-
----
-
-### Step 2 — Generate components (tool script)
-
-After you approve the parts, `generate_components.py` runs OpenAI once per part (using `source.png` as reference), fal.ai for GLBs, and `blender_measure_glbs.py` inside Blender to measure each mesh into `component_dims.json`.
-
-**Who:** orchestrator agent → `generate_components.py`  
-**Requires:** `OPENAI_API_KEY`, `FAL_KEY`  
-**Outputs:**
-
-| File | Description |
-|------|-------------|
-| `component_images/<part>.png` | One isolated PNG per part |
-| `component_glbs/<part>.glb` | One GLB mesh per part |
-| `component_dims.json` | Raw bounding box per GLB |
-
-![Four part renders on white background](/assets/images/dexter/part_renders.png)
-
-| Part | File |
-|------|------|
-| Cabinet | `component_images/dishwasher_cabinet.png` |
-| Front door | `component_images/front_door.png` |
-| Upper rack | `component_images/upper_dish_rack.png` |
-| Lower rack | `component_images/lower_dish_rack.png` |
-
-Uses OpenAI `images.edit()` with `source.png` attached as visual reference for every call.
-
----
-
-<video controls width="100%">
-  <source src="/assets/video/dexter/component_glbs.mp4" type="video/mp4" />
-</video>
-
-*Per-part meshes after fal.ai Hunyuan 3D conversion.*
-
-The script skips parts whose PNG, GLB, or dims already exist, so re-running only fills in missing assets. The entire step is skipped if `component_dims.json` already exists.
-
----
-
-### Step 3 — Placement init (tool script)
-
-`initialize_placement.py` combines geometry from `parts.json` with raw mesh sizes from `component_dims.json` to write `placement_init.json` and `iterations/001/assembly.json`.
-
-**Who:** orchestrator agent → `initialize_placement.py`  
-**Outputs:**
-
-| File | Description |
-|------|-------------|
-| `placement_init.json` | `root_scale`, per-part `child_scale`, closed/open poses |
-| `iterations/001/assembly.json` | First Layout IR (`world_size`, `world_center`, `rpy_deg` per link) |
-
-Real-world dims come from `world_dims` in `parts.json` (e.g. `[0.60, 0.60, 0.85]` m for the dishwasher cabinet). All values are derived from geometry fields — no LLM guessing.
-
----
-
-### Step 4 — Placement ↔ critic loop
-
-Blender assembles and renders four views. The critic subagent scores the result by comparing the renders and `assembly.json` against the source photo, then writes corrections. `apply_critic.py` applies those corrections directly to world-space values in the next `assembly.json`. The orchestrator agent keeps the best-scoring iteration.
-
-**Who:** critic subagent; `apply_critic.py`, `blender_assemble.py`, `blender_render_views.py`  
-**Outputs per iteration** (`iterations/NNN/`):
-
-| File | Description |
-|------|-------------|
-| `assembly.json` | Layout IR — `world_size`, `world_center`, `rpy_deg` per link |
-| `assembled.blend` | Blender scene |
-| `render_views.json` | Four auto-framed cameras (orchestrator agent-written) |
-| `renders/front.png` | Front diagnostic view |
-| `renders/top.png` | Top view — door angles, X/Y alignment |
-| `renders/left.png` | Left view — depth, rack pull-out |
-| `renders/isometric.png` | Overall shape |
-| `critic.json` | Score (0–100) and per-component corrections |
-
-#### Iteration 1 — score 72
-
-First layout from `initialize_placement.py`. Cabinet and door were reasonable; both racks were **offset laterally** and protruded through the side walls.
-
-![Iteration 1 isometric render](/assets/images/dexter/run/iter_001_isometric.png)
-
-![Iteration 1 front render](/assets/images/dexter/run/iter_001_front.png)
-
-Critic summary: *"Dishwasher body and door are close, but both racks are laterally offset and visibly protrude through the side walls."*
-
-| Component | Critic action |
-|-----------|--------------|
-| `dishwasher_cabinet` | `locked: true` |
-| `front_door` | `locked: true` |
-| `upper_dish_rack` | `corrected_world_center` — shift to centre |
-| `lower_dish_rack` | `corrected_world_center` — shift to centre |
-
-#### Iteration 6 — score 86 (best in this run)
-
-After five rounds of critique and `apply_critic.py` refinements, iteration 6 was the best layout.
-
-![Iteration 6 isometric render](/assets/images/dexter/run/iter_006_isometric.png)
-
-![Iteration 6 front render](/assets/images/dexter/run/iter_006_front.png)
-
-![Iteration 6 left render](/assets/images/dexter/run/iter_006_left.png)
-
-| Iteration | Score | Main issue |
-|-----------|-------|------------|
-| 001 | 72 | Racks offset through side walls |
-| 002 | 84 | Minor rack depth |
-| 003 | 78 | Door position regression |
-| 004 | 78 | Door slab shifted |
-| 005 | 84 | Upper rack over-pulled |
-| 006 | 86 | Best layout — rack pull-out corrected |
-
-The orchestrator agent tracks the **best** iteration by score. Iteration 6 scored highest at **86**, so that layout was kept for approval and export.
-
-**Iteration 2+ behavior:** `apply_critic.py` reads the previous best `assembly.json` + `critic.json` and assigns `corrected_world_size`, `corrected_world_center`, and `suggested_rotation_delta` directly. Components marked `locked: true` are not changed.
-
----
-
-### Step 5 — Human gate 2 (placement approval)
-
-The loop has finished. You review the best iteration's renders and decide whether to approve, pick a different iteration, or ask for more rounds.
-
-**Who:** you  
-
-Review the best iteration's `renders/`, `critic.json`, and open `assembled.blend` in Blender if needed. Tell the orchestrator agent to approve, pick a different iteration, or request more placement rounds.
-
----
-
-### Step 6 — USD export (tool script)
-
-With placement approved, Blender exports the scene to USD. Textures are extracted alongside the file so Isaac Sim can load materials correctly. This is the final deliverable.
-
-**Who:** orchestrator agent → `blender_export_usd.py`  
-**Requires:** your approval at human gate 2  
-**Outputs:**
-
-| File | Description |
-|------|-------------|
-| `robot.usda` | Geometry + materials, Z-up, metres |
-| `robot_prim_map.json` | Blender object name → USD prim path |
-| `textures/` | Extracted material images |
-
-```bash
-blender --background --python tool_scripts/blender_export_usd.py -- \
-  --blend .intermediate/dishwasher/001/iterations/006/assembled.blend \
-  --output .intermediate/dishwasher/001/robot.usda \
-  --root-prim-path /World/Robot
-```
-
-<video controls width="100%">
-  <source src="/assets/video/dexter/dishwasher_blender_animation.mp4" type="video/mp4" />
-</video>
-
-*Final assembly in Blender with door and racks on their joints.*
-
----
 
 ## Validate artifacts
 
 ```bash
-python3 tool_scripts/validate_json.py \
+python3 tool_scripts/common.py \
   --schema schemas/parts.schema.json \
   --data .intermediate/dishwasher/001/parts.json
 
-python3 tool_scripts/validate_json.py \
+python3 tool_scripts/common.py \
   --schema schemas/assembly.schema.json \
-  --data .intermediate/dishwasher/001/iterations/006/assembly.json
+  --data .intermediate/dishwasher/001/iterations/001/assembly.json
 ```
 
----
+## Further reading
 
-## Troubleshooting
-
-See [Troubleshooting](/sample-runs/troubleshooting) for common failures (API keys, fal credits, placement not converging, schema errors, resume semantics).
+| Topic | Page |
+|-------|------|
+| End-to-end walkthrough with example outputs | [Sample Run: Dishwasher](/sample-runs/dishwasher-example) |
+| Pipeline stages and loop logic | [Agentic Loop](/architecture/agentic-loop) |
+| Agents and tool scripts | [Agents](/architecture/agents) · [Tools](/architecture/tools) |
+| Common failures | [Troubleshooting](/sample-runs/troubleshooting) |

@@ -1,20 +1,31 @@
 [tool.ruff]
 target-version = "py311"
+line-length = 100
+src = ["tool_scripts"]
 
 [tool.ruff.lint]
 select = [
     "E",   # pycodestyle errors
     "W",   # pycodestyle warnings
-    "F",   # pyflakes (unused imports, undefined names, etc.)
-    "I",   # isort (import ordering)
-    "UP",  # pyupgrade (modern Python syntax)
-    "B",   # flake8-bugbear (likely bugs)
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
     "SIM", # flake8-simplify
+    "N",   # pep8-naming
 ]
 ignore = [
-    "E501",  # line too long — long formula lines in placement scripts are intentional
+    "N802",  # Blender RNA operator names (e.g. usd_export)
+    "N806",  # allow math symbols in tight geometry blocks when needed
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# Blender scripts import bpy which is only available inside Blender
-"tool_scripts/blender_*.py" = ["F401"]
+"tool_scripts/blender_*.py" = ["F401"]  # bpy only exists inside Blender
+
+[tool.ruff.lint.isort]
+known-first-party = ["common"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"

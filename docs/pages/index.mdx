@@ -16,20 +16,20 @@ Dexter targets that bottleneck: given a reference image, it produces an **articu
 
 ## What Dexter produces
 
-An articulated asset is many rigid **links** (chassis, door, rack) connected by **joints**. Motion changes joint angles or slides — not a single frozen mesh:
+An articulated asset is many rigid **parts** (chassis, door, rack) connected by **joints**. Motion changes joint angles or slides — not a single frozen mesh:
 
 ![Articulated hexapod example](/assets/images/dexter/articulated_asset_example.gif)
 
-*An articulated hexapod: legs rotate on hinge joints while the body stays one rigid link.*
+*An articulated hexapod: legs rotate on hinge joints while the body stays one rigid part.*
 
 Dexter's output per run:
 
 | Deliverable | Description |
 |-------------|-------------|
 | Per-part meshes | `component_glbs/<part>.glb` — one GLB per moving part |
-| Layout IR | `assembly.json` — position, orientation, scale for each link |
+| Layout IR | `assembly.json` — position, orientation, scale for each part |
 | Parts IR | `parts.json` — kinematic tree and joint types |
-| Critique IR | `critic.json` — score and per-component layout fixes |
+| Critique IR | `critic.json` — score and per-part layout fixes |
 | USD export | `robot.usda` + `textures/` — loadable in Isaac Sim |
 
 ## How it works (at a glance)
@@ -63,5 +63,6 @@ Full setup: [Requirements](/getting-started/requirements) → [Installation](/ge
 |---------|----------|
 | [Getting Started](/getting-started/requirements) | Requirements, installation, configuration, pipeline run |
 | [Architecture](/architecture/overview) | Agentic loop, agents, IRs, schemas, tool scripts |
+| [Sample Runs](/sample-runs/dishwasher-example) | End-to-end example with inputs, outputs, and logic |
 | [Troubleshooting](/sample-runs/troubleshooting) | Common failures and recovery |
 | [Developer Guide](/contributing/overview) | Project structure, extending the pipeline, local dev |

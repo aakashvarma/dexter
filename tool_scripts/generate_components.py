@@ -1,7 +1,4 @@
-"""generate_components.py — Generate component PNGs, GLBs, and dimensions from parts.json.
-
-Reads ``config.yaml``, builds prompts from ``parts.json``, generates PNGs,
-converts them to GLBs, then measures GLBs with Blender.
+"""Generate component PNGs, GLBs, and dimensions from parts.json.
 
 Run::
 
@@ -14,7 +11,6 @@ from __future__ import annotations
 
 import argparse
 import base64
-import json
 import os
 import subprocess
 import sys
@@ -23,10 +19,9 @@ from pathlib import Path
 
 import fal_client
 import requests
-import yaml
 from openai import OpenAI
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+from common import exit_if_missing, load_json_file, load_yaml_config
 
 
 def parse_args() -> argparse.Namespace:
@@ -35,34 +30,30 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def load_config() -> dict:
-    return yaml.safe_load((_REPO_ROOT / "config.yaml").read_text(encoding="utf-8"))
-
-
-def run_paths(run_dir: str | Path, config: dict) -> dict:
-    run = Path(run_dir).expanduser().resolve()
-    img = config["image_generation"]
-    fal = config["fal"]
+def build_run_paths(run_dir: str | Path, config: dict) -> dict:
+    run_path = Path(run_dir).expanduser().resolve()
+    image_config = config["image_generation"]
+    fal_config = config["fal"]
     return {
-        "parts_path": run / img["parts_file"],
-        "images_dir": run / img["output_dir"],
-        "reference_image": run / img["reference_image"],
-        "glbs_dir": run / fal["output_dir"],
-        "dims_path": run / fal["dims_output"],
-        "background_instruction": img["background_instruction"],
-        "image_model": img["model"],
-        "image_size": img["size"],
-        "fal_endpoint": fal["endpoint"],
-        "fal_generate_type": fal["generate_type"],
-        "fal_enable_pbr": fal["enable_pbr"],
-        "fal_face_count": fal["face_count"],
-        "fal_download_timeout": fal["download_timeout_seconds"],
-        "fal_image_extensions": {ext.lower() for ext in fal["image_extensions"]},
+        "parts_path": run_path / image_config["parts_file"],
+        "images_dir": run_path / image_config["output_dir"],
+        "reference_image": run_path / image_config["reference_image"],
+        "glbs_dir": run_path / fal_config["output_dir"],
+        "dims_path": run_path / fal_config["dims_output"],
+        "background_instruction": image_config["background_instruction"],
+        "image_model": image_config["model"],
+        "image_size": image_config["size"],
+        "fal_endpoint": fal_config["endpoint"],
+        "fal_generate_type": fal_config["generate_type"],
+        "fal_enable_pbr": fal_config["enable_pbr"],
+        "fal_face_count": fal_config["face_count"],
+        "fal_download_timeout": fal_config["download_timeout_seconds"],
+        "fal_image_extensions": {ext.lower() for ext in fal_config["image_extensions"]},
         "blender_binary": config["paths"]["blender_binary"],
     }
 
 
-def readable(name: str) -> str:
+def format_snake_case_name(name: str) -> str:
     return name.replace("_", " ").strip()
 
 
@@ -72,18 +63,23 @@ def build_prompt(
     all_part_names: list[str],
     background: str,
 ) -> str:
-    name = readable(part["name"])
+    display_name = format_snake_case_name(part["name"])
     description = part["description"].strip()
     parts_list = ", ".join(all_part_names)
-    exclusion_lines = "\n".join(
-        f"- {readable(other['name'])} - {other['description'].strip()}"
-        for other in other_parts
-    ) or "- nothing"
+    exclusion_lines = (
+        "\n".join(
+            f"- {format_snake_case_name(other['name'])} - {other['description'].strip()}"
+            for other in other_parts
+        )
+        or "- nothing"
+    )
     return (
         f"Use the attached source image as the visual reference. "
-        f"It shows the full object and is being divided into {len(all_part_names)} parts: {parts_list}.\n"
-        f"Generate {name}: {description}\n"
-        f"Show the complete component from an isometric-style angle that reveals as much of its shape as possible.\n"
+        f"It shows the full object and is being divided into "
+        f"{len(all_part_names)} parts: {parts_list}.\n"
+        f"Generate {display_name}: {description}\n"
+        "Show the complete component from an isometric-style angle "
+        "that reveals as much of its shape as possible.\n"
         f"Without the following (leave their positions in the frame empty):\n"
         f"{exclusion_lines}\n"
         f"{background}"
@@ -92,15 +88,15 @@ def build_prompt(
 
 def build_prompts(parts: dict, background: str) -> list[dict]:
     part_entries = parts["parts"]
-    all_part_names = [readable(p["name"]) for p in part_entries]
-    prompts = []
+    all_part_names = [format_snake_case_name(part["name"]) for part in part_entries]
+    prompts: list[dict] = []
     for part in part_entries:
         name = part["name"]
-        others = [other for other in part_entries if other["name"] != name]
+        other_parts = [other for other in part_entries if other["name"] != name]
         prompts.append(
             {
                 "component": name,
-                "prompt": build_prompt(part, others, all_part_names, background),
+                "prompt": build_prompt(part, other_parts, all_part_names, background),
                 "output_filename": f"{name}.png",
             }
         )
@@ -111,25 +107,22 @@ def generate_images(paths: dict, prompts: list[dict]) -> None:
     images_dir = paths["images_dir"]
     images_dir.mkdir(parents=True, exist_ok=True)
 
-    ref_path = paths["reference_image"]
-    if not ref_path.exists():
-        raise FileNotFoundError(f"reference image not found: {ref_path}")
-    print(f"using source image: {ref_path}")
+    reference_image = paths["reference_image"]
+    if not reference_image.exists():
+        raise FileNotFoundError(f"reference image not found: {reference_image}")
 
     client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
     for entry in prompts:
-        out_file = images_dir / entry["output_filename"]
-        if out_file.exists():
-            print(f"skip (exists): {out_file.name}")
+        output_file = images_dir / entry["output_filename"]
+        if output_file.exists():
+            print(f"skip (exists): {output_file.name}")
             continue
 
-        print(f"generating: {out_file.name}  …", flush=True)
-
-        with ref_path.open("rb") as ref_fh:
+        with reference_image.open("rb") as reference_handle:
             response = client.images.edit(
                 model=paths["image_model"],
-                image=ref_fh,
+                image=reference_handle,
                 prompt=entry["prompt"],
                 n=1,
                 size=paths["image_size"],
@@ -138,20 +131,9 @@ def generate_images(paths: dict, prompts: list[dict]) -> None:
         image_data = response.data[0]
 
         if getattr(image_data, "b64_json", None):
-            png_bytes = base64.b64decode(image_data.b64_json)
-            out_file.write_bytes(png_bytes)
+            output_file.write_bytes(base64.b64decode(image_data.b64_json))
         else:
-            urllib.request.urlretrieve(image_data.url, out_file)  # noqa: S310
-
-        print(f"  saved → {out_file}")
-
-    print("Image generation complete.")
-
-
-def on_fal_queue_update(update: object) -> None:
-    if isinstance(update, fal_client.InProgress):
-        for log in update.logs:
-            print(f"  {log.get('message', log)}")
+            urllib.request.urlretrieve(image_data.url, output_file)  # noqa: S310
 
 
 def generate_glbs(paths: dict) -> None:
@@ -162,19 +144,16 @@ def generate_glbs(paths: dict) -> None:
     glbs_dir.mkdir(parents=True, exist_ok=True)
 
     images = sorted(
-        p for p in paths["images_dir"].iterdir()
-        if p.is_file() and p.suffix.lower() in paths["fal_image_extensions"]
+        path
+        for path in paths["images_dir"].iterdir()
+        if path.is_file() and path.suffix.lower() in paths["fal_image_extensions"]
     )
     pending = [
-        img for img in images
-        if not (glbs_dir / f"{img.stem}.glb").exists()
+        image_path for image_path in images if not (glbs_dir / f"{image_path.stem}.glb").exists()
     ]
-    print(f"Found {len(images)} images, processing {len(pending)} for 3D")
 
-    for i, image_path in enumerate(pending, 1):
+    for image_path in pending:
         output_path = glbs_dir / f"{image_path.stem}.glb"
-        print(f"\n[{i}/{len(pending)}] {image_path.name} → {output_path.name}")
-
         image_url = fal_client.upload_file(str(image_path))
         result = fal_client.subscribe(
             paths["fal_endpoint"],
@@ -184,16 +163,11 @@ def generate_glbs(paths: dict) -> None:
                 "enable_pbr": paths["fal_enable_pbr"],
                 "face_count": paths["fal_face_count"],
             },
-            with_logs=True,
-            on_queue_update=on_fal_queue_update,
         )
 
         glb_url = result["model_glb"]["url"]
-        data = requests.get(glb_url, timeout=paths["fal_download_timeout"]).content
-        output_path.write_bytes(data)
-        print(f"Saved {len(data) / 1_000_000:.1f} MB")
-
-    print("3D generation complete.")
+        glb_bytes = requests.get(glb_url, timeout=paths["fal_download_timeout"]).content
+        output_path.write_bytes(glb_bytes)
 
 
 def measure_glbs(paths: dict) -> None:
@@ -202,13 +176,13 @@ def measure_glbs(paths: dict) -> None:
         print(f"skip (exists): {dims_path}")
         return
 
-    script = _REPO_ROOT / "tool_scripts" / "blender_measure_glbs.py"
+    script_path = Path(__file__).resolve().parent / "blender_measure_glbs.py"
     subprocess.run(
         [
             paths["blender_binary"],
             "--background",
             "--python",
-            str(script),
+            str(script_path),
             "--",
             "--glbs-dir",
             str(paths["glbs_dir"]),
@@ -219,17 +193,12 @@ def measure_glbs(paths: dict) -> None:
     )
 
 
-def require_json(path: Path, label: str) -> None:
-    if not path.is_file():
-        raise FileNotFoundError(f"{label} not found: {path}")
-
-
 def generate_components(run_dir: str | Path) -> None:
-    config = load_config()
-    paths = run_paths(run_dir, config)
+    config = load_yaml_config()
+    paths = build_run_paths(run_dir, config)
 
-    require_json(paths["parts_path"], "parts.json")
-    parts = json.loads(paths["parts_path"].read_text(encoding="utf-8"))
+    exit_if_missing(paths["parts_path"], "parts.json")
+    parts = load_json_file(paths["parts_path"])
     prompts = build_prompts(parts, paths["background_instruction"])
 
     if "OPENAI_API_KEY" not in os.environ:
@@ -238,7 +207,6 @@ def generate_components(run_dir: str | Path) -> None:
     generate_images(paths, prompts)
     generate_glbs(paths)
     measure_glbs(paths)
-    print("Component generation complete.")
 
 
 def main() -> None:

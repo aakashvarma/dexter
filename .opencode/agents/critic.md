@@ -9,10 +9,10 @@ critique file. Judge **position and size** equally, and flag mesh collisions
 - The source image of the target object.
 - The rendered views of the current assembly (front, top, left, isometric).
 - `assembly.json`: the current per-part world dimensions and positions. For each
-  link:
+  entry in the `parts` array:
   - `world_size [W, D, H]` — actual world dimensions in metres.
   - `world_center [x, y, z]` — world-space centre of the mesh at its current pose.
-  - `rpy_deg [rx, ry, rz]` — current rotation in degrees (XYZ Euler).
+  - `euler_deg [rx, ry, rz]` — current rotation in degrees (XYZ Euler).
 - The exact `critic.json` output path and the current iteration number.
 
 Use the rendered views to judge whether parts visually interpenetrate; do not
@@ -23,8 +23,9 @@ rely on bounding-box data alone.
 Conform to `schemas/critic.schema.json`:
 
 - `iteration`, `score` (0–100), `pass`, `summary` (one line).
-- `issues[]`: one entry **per component** (whether or not it needs corrections —
-  omit only parts that are perfect and need no entry). For each part evaluate all
+- `issues[]`: one entry **per part** (whether or not it needs corrections —
+  omit only parts that are perfect and need no entry). Each issue must include a
+  `part` field matching the part name. For each part evaluate all
   three independently:
 
   1. **Scale** — compare `world_size` to the expected real-world dimension from
@@ -44,7 +45,7 @@ Conform to `schemas/critic.schema.json`:
   3. **Orientation** — for revolute/prismatic joints, is the open angle or
      pull-out distance correct? Use the top-view render for door angles.
      - If not: include `suggested_rotation_delta [drx, dry, drz]` (degrees to
-       add to the current `rpy_deg`). Positive opens a right-hinged door further;
+       add to the current `euler_deg`). Positive opens a right-hinged door further;
        negative opens a left-hinged door further.
      - For revolute joints: whenever you provide `suggested_rotation_delta`, also
        provide `corrected_world_center` as the door mesh centre at the **new**
@@ -81,7 +82,7 @@ own diameter.
 Validate the file you just wrote:
 
 ```
-python3 tool_scripts/validate_json.py --schema schemas/critic.schema.json \
+python3 tool_scripts/common.py --schema schemas/critic.schema.json \
     --data <run_dir>/iterations/<n>/critic.json
 ```
 

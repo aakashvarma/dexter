@@ -9,7 +9,7 @@ Common issues during pipeline runs and how to fix them.
 ```bash
 # macOS
 export PATH="/Applications/Blender.app/Contents/MacOS:$PATH"
-# or in config.yaml:
+# or in configs/base.yaml:
 # paths:
 #   blender_binary: /Applications/Blender.app/Contents/MacOS/Blender
 ```
@@ -48,12 +48,12 @@ python3 -c "import fal_client, openai, jsonschema, yaml; print('OK')"
 ### Missing moving parts
 
 **Symptom:** Drawer or door not in parts list
-**Fix:** Add the part with correct `joint_type`, `size_fraction`, `hinge_side`/`slide_axis`. Re-run from parts gate.
+**Fix:** Add the part with correct `joint_type`, `world_size`, `world_center`, and `euler_deg`. Re-run from parts gate.
 
-### Wrong hinge side
+### Wrong initial pose
 
-**Symptom:** Door rotates around wrong edge
-**Fix:** Edit `hinge_side` in `parts.json`. Delete `placement_init.json` and `iterations/001/assembly.json`, then rerun placement init:
+**Symptom:** Door or drawer pose does not match the source image
+**Fix:** Edit `world_center` and `euler_deg` in `parts.json`. Delete `placement_init.json` and `iterations/001/assembly.json`, then rerun placement init:
 
 ```bash
 python3 tool_scripts/initialize_placement.py --run-dir .intermediate/dishwasher/001
@@ -95,13 +95,13 @@ opencode run --agent orchestrator -- "resume .intermediate/dishwasher/001/"
 **Fix:**
 
 1. Regenerate source PNG with better description
-2. Increase `face_count` in `config.yaml` (e.g. 80000)
+2. Increase `face_count` in `configs/base.yaml` (e.g. 80000)
 3. Re-run fal step only
 
 ### GLB size seems wrong
 
 **Symptom:** Part appears much larger/smaller than expected
-**Note:** Raw GLB sizes vary — this is normal. `initialize_placement.py` and the critic loop correct via `child_scale`.
+**Note:** Raw GLB sizes vary — this is normal. `initialize_placement.py` and the critic loop correct scale via `node_scale` and `corrected_world_size`.
 
 ---
 
@@ -112,21 +112,21 @@ opencode run --agent orchestrator -- "resume .intermediate/dishwasher/001/"
 **Symptom:** Door 2× too wide, rack too small
 **Fix:**
 
-1. Check `placement_init.json` `child_scale` values
-2. Verify `size_fraction` and `world_dims` in `parts.json`
+1. Check `placement_init.json` `node_scale` values
+2. Verify `world_size`, `world_center`, and `euler_deg` in `parts.json`
 3. Delete `placement_init.json` and rerun `initialize_placement.py`
 
 ### Mesh collisions (overlap)
 
 **Symptom:** Parts interpenetrate in renders
-**Fix:** Critic should flag this. If not, manually adjust `origin.xyz` in `assembly.json` or run more iterations.
+**Fix:** Critic should flag this. If not, run more iterations or adjust `world_center` in `assembly.json`.
 
 ### Door at wrong angle
 
 **Symptom:** Door closed when source shows open
 **Fix:**
 
-1. Check `open_angle_deg` in `parts.json`
+1. Check `world_center` and `euler_deg` in `parts.json`
 2. Delete `placement_init.json` and `iterations/001/assembly.json`, rerun `initialize_placement.py`
 3. Let critic correct via `suggested_rotation_delta`
 
@@ -136,8 +136,8 @@ opencode run --agent orchestrator -- "resume .intermediate/dishwasher/001/"
 **Fix:**
 
 1. Check if critic locks components too early
-2. Edit `parts.json` geometry hints, regenerate hints
-3. Increase `max_loops` in `config.yaml`
+2. Edit `parts.json` placement numbers, regenerate placement init
+3. Increase `max_loops` in `configs/base.yaml`
 4. Lower `score_threshold` if 75–80 is acceptable for your use case
 
 ### Score regresses
@@ -155,7 +155,7 @@ opencode run --agent orchestrator -- "resume .intermediate/dishwasher/001/"
 
 ### Slow rendering (>2 min per iteration)
 
-**Fix in `config.yaml`:**
+**Fix in `configs/base.yaml`:**
 
 ```yaml
 render:
@@ -199,15 +199,15 @@ The orchestrator auto-retries up to `max_validation_retries`. If persistent:
 
 | Error | Fix |
 |-------|-----|
-| `size_fraction` required | Add to non-root part in `parts.json` |
-| `hinge_side` required | Add to revolute joint part |
+| `world_center` required | Add to non-root part in `parts.json` |
+| `euler_deg` required | Add to non-root part in `parts.json` |
 | `additionalProperties` | Remove unknown fields from JSON |
 | `minItems: 3` on arrays | Add missing axis: `[x, y]` → `[x, y, z]` |
 
 Validate manually:
 
 ```bash
-python3 tool_scripts/validate_json.py \
+python3 tool_scripts/common.py \
   --schema schemas/assembly.schema.json \
   --data .intermediate/dishwasher/001/iterations/006/assembly.json
 ```

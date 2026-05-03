@@ -83,7 +83,7 @@ sudo snap install blender --classic
 blender --version
 ```
 
-If Blender is not on PATH, set the full path in `config.yaml`:
+If Blender is not on PATH, set the full path in `configs/base.yaml`:
 
 ```yaml
 paths:
@@ -124,7 +124,7 @@ opencode --version && echo "OpenCode OK"
 
 | Problem | Fix |
 |---------|-----|
-| `blender: command not found` | Install Blender or set `paths.blender_binary` in `config.yaml` |
+| `blender: command not found` | Install Blender or set `paths.blender_binary` in `configs/base.yaml` |
 | `ModuleNotFoundError: fal_client` | `pip install -r requirements.txt` in active venv |
 | OpenCode `/connect` fails | Check network; try `npm install -g opencode-ai` |
 | Blender hangs on first run | Normal on macOS — grant permissions in System Settings |

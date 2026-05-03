@@ -1,8 +1,4 @@
-"""blender_measure_glbs.py — Measure each GLB's world bounding box.
-
-Runs inside Blender (``bpy``). For every ``.glb`` in a directory it imports the
-mesh, computes the world-space bounding box, then writes one ``component_dims``
-JSON so the placement and critic agents can reason in real units.
+"""Measure each GLB's world bounding box and write component_dims.json.
 
 Run::
 
@@ -14,20 +10,12 @@ Run::
 from __future__ import annotations
 
 import argparse
-import json
-import sys
 from pathlib import Path
 
 import bpy  # type: ignore[import-not-found]
 from mathutils import Vector  # type: ignore[import-not-found]
 
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--glbs-dir", required=True)
-    parser.add_argument("--output", required=True)
-    argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
-    return parser.parse_args(argv)
+from common import parse_blender_args, write_json_file
 
 
 def clear_scene() -> None:
@@ -36,7 +24,6 @@ def clear_scene() -> None:
 
 
 def measure_glb(path: Path) -> dict:
-    """Import one GLB, return its world bbox size/center/min/max."""
     clear_scene()
     bpy.ops.import_scene.gltf(filepath=str(path))
 
@@ -49,25 +36,28 @@ def measure_glb(path: Path) -> dict:
     if not corners:
         raise RuntimeError(f"No mesh imported from {path}")
 
-    lo = Vector(min(c[i] for c in corners) for i in range(3))
-    hi = Vector(max(c[i] for c in corners) for i in range(3))
+    bounds_min = Vector(min(corner[axis] for corner in corners) for axis in range(3))
+    bounds_max = Vector(max(corner[axis] for corner in corners) for axis in range(3))
     return {
-        "size": list(hi - lo),
-        "center": list((lo + hi) / 2),
-        "min": list(lo),
-        "max": list(hi),
+        "size": list(bounds_max - bounds_min),
+        "center": list((bounds_min + bounds_max) / 2),
+        "min": list(bounds_min),
+        "max": list(bounds_max),
     }
 
 
 def main() -> None:
-    args = parse_args()
-    glbs_dir = Path(args.glbs_dir).expanduser().resolve()
-    parts = {p.stem: measure_glb(p) for p in sorted(glbs_dir.glob("*.glb"))}
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--glbs-dir", required=True)
+    parser.add_argument("--output", required=True)
+    args = parse_blender_args(parser)
 
-    output = Path(args.output).expanduser().resolve()
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps({"parts": parts}, indent=2), encoding="utf-8")
-    print(f"Wrote {output}")
+    glbs_dir = Path(args.glbs_dir).expanduser().resolve()
+    parts = {path.stem: measure_glb(path) for path in sorted(glbs_dir.glob("*.glb"))}
+
+    output_path = Path(args.output).expanduser().resolve()
+    write_json_file(output_path, {"parts": parts})
+    print(f"Wrote {output_path}")
 
 
 if __name__ == "__main__":

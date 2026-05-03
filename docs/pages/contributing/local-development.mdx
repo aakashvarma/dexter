@@ -42,7 +42,7 @@ Scripts can be run independently for debugging, outside the agent loop.
 
 ```bash
 # Validate JSON
-python3 tool_scripts/validate_json.py \
+python3 tool_scripts/common.py \
   --schema schemas/parts.schema.json \
   --data .intermediate/dishwasher/001/parts.json
 
@@ -144,7 +144,7 @@ blender --background --python tool_scripts/blender_render_views.py -- \
 Write `assembly.json` by hand, validate, then assemble:
 
 ```bash
-python3 tool_scripts/validate_json.py \
+python3 tool_scripts/common.py \
   --schema schemas/assembly.schema.json \
   --data my_assembly.json
 ```
@@ -153,16 +153,16 @@ python3 tool_scripts/validate_json.py \
 
 | Problem | Debug approach |
 |---------|---------------|
-| Wrong scale | Compare `placement_init.json` child_scale vs assembly; compute world size manually |
+| Wrong scale | Compare `placement_init.json` `node_scale` vs assembly `world_size`; compute world size manually |
 | Wrong position | Open `assembled.blend`, check pivot empties |
-| Schema failure | Run `validate_json.py` directly, read error paths |
+| Schema failure | Run `common.py` directly, read error paths |
 | Agent ignores instructions | Check prompt file path in `opencode.json`; verify permissions |
 | Step not skipped on resume | Check if output exists AND validates; invalid JSON triggers redo |
 | Blender script fails | Run with `--background` and check stderr; test with GUI: `blender --python script.py` |
 
 ## Config for faster dev iteration
 
-Create a local override mindset in `config.yaml`:
+Create a local override mindset in `configs/base.yaml`:
 
 ```yaml
 loop:
@@ -178,7 +178,7 @@ Do not commit dev-only config unless the team agrees.
 
 ## What to verify before submitting changes
 
-1. `python3 tool_scripts/validate_json.py` passes on any changed schemas with valid fixtures
+1. `python3 tool_scripts/common.py` passes on any changed schemas with valid fixtures
 2. Agent prompt changes tested with at least one pipeline step
 3. Tool script changes tested with `--help` and a real run against `.intermediate/` artifacts
 4. `npm run build` passes in `docs/` if documentation changed

@@ -11,7 +11,7 @@ step ran just because it came up earlier in the chat; trust the files on disk.
 Skip any step whose output already exists and is valid, unless the user asks you
 to redo it.
 
-Read `config.yaml` for the values you need: `loop.*`, `image_generation`,
+Read `configs/base.yaml` for the values you need: `loop.*`, `image_generation`,
 `placement_init`, `fal`, and `render` blocks.
 
 If the user hands you a fresh image, copy it to `<run_dir>/source.png` and pick
@@ -26,16 +26,16 @@ the next free `NNN` (or reuse the one they name).
    continuing. Each name must be specific and match its description; descriptions
    must stay factual and non-exaggerated. Do not proceed on your own.
 3. components: run `python3 tool_scripts/generate_components.py --run-dir <run_dir>`.
-   The script reads `config.yaml` and `parts.json`, then writes `component_images/`,
+   The script reads `configs/base.yaml` and `parts.json`, then writes `component_images/`,
    `component_glbs/`, and `component_dims.json`. It skips existing PNGs, GLBs, and
    dims. If fal fails (e.g. credits), report which GLBs are missing and stop; the
    user can rerun this step later. Skip entirely if `component_dims.json` exists.
 4. placement init: run `python3 tool_scripts/initialize_placement.py --run-dir <run_dir>`.
-   The script reads `config.yaml`, `parts.json` (including root `world_dims`,
-   per-part `open_angle_deg` / `pullout_fraction`), and `component_dims.json`.
+   The script reads `configs/base.yaml`, `parts.json` (root `world_size`; per-part
+   `world_size`, `world_center`, `euler_deg`), and `component_dims.json`.
    It writes two files:
-   - `placement_init.json` — per-part scale and pose hints
-   - `iterations/001/assembly.json` — assembly built directly from the hints
+   - `placement_init.json` — per-part scale and Blender node offsets
+   - `iterations/001/assembly.json` — assembly copied from parts.json poses
    If the output looks wrong, fix `parts.json` and delete both outputs to force
    regeneration. Do not edit either file manually.
    Skip if both outputs already exist.
@@ -49,7 +49,7 @@ Run iterations starting at 1. For iteration `n` (zero-padded dir, e.g. `001`):
    run:
 
    ```
-   python3 tool_scripts/apply_critic.py \
+   python3 tool_scripts/update_placement.py \
        --prev-assembly iterations/<n-1>/assembly.json \
        --critic        iterations/<n-1>/critic.json \
        --output        iterations/<n>/assembly.json
@@ -61,15 +61,15 @@ Run iterations starting at 1. For iteration `n` (zero-padded dir, e.g. `001`):
 2. assemble: run
    `blender --background --python tool_scripts/blender_assemble.py -- --layout iterations/<n>/assembly.json --output iterations/<n>/assembled.blend`.
 3. render views: write `iterations/<n>/render_views.json` (four cameras per
-   `schemas/render_views.schema.json`; use `render` defaults from config.yaml), then
+   `schemas/render_views.schema.json`; use `render` defaults from configs/base.yaml), then
    validate:
-   `python3 tool_scripts/validate_json.py --schema schemas/render_views.schema.json --data iterations/<n>/render_views.json`.
+   `python3 tool_scripts/common.py --schema schemas/render_views.schema.json --data iterations/<n>/render_views.json`.
 4. render: run
    `blender --background --python tool_scripts/blender_render_views.py -- --blend iterations/<n>/assembled.blend --cameras iterations/<n>/render_views.json --output-dir iterations/<n>/renders/`.
 5. critique: invoke the `critic` subagent with the source image, all rendered
    PNGs, and `iterations/<n>/assembly.json`. Write `iterations/<n>/critic.json`.
    The assembly already contains per-part `world_size`, `world_center`, and
-   `rpy_deg` in metres — pass it directly; no pre-computation step needed.
+   `euler_deg` in metres — pass it directly; no pre-computation step needed.
 6. exit check: track the best iteration by `score`. Stop when
    `score >= loop.score_threshold and n >= loop.min_loops`, when
    `n >= loop.max_loops`, or when the score has not improved over the best for
@@ -96,7 +96,7 @@ proceed on your own.
 Export `iterations/<B>/assembled.blend` to USD, where `B` is the approved iteration
 (highest critic score by default, or the iteration the user picked). Do not start
 until the user has approved a layout in the gate above. Read
-`usd.root_prim_path` from `config.yaml`. Skip if `robot.usda` already exists.
+`usd.root_prim_path` from `configs/base.yaml`. Skip if `robot.usda` already exists.
 
 Run:
 

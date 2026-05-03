@@ -21,7 +21,7 @@ Conform to `schemas/<name>.schema.json`.
 
 ## After writing
 Validate:
-python3 tool_scripts/validate_json.py --schema schemas/<name>.schema.json --data <path>
+python3 tool_scripts/common.py --schema schemas/<name>.schema.json --data <path>
 ```
 
 Follow existing conventions:
@@ -42,7 +42,7 @@ Follow existing conventions:
       "prompt": "{file:./.opencode/agents/<name>.md}",
       "permission": {
         "edit": {"*": "deny", ".intermediate/**": "allow"},
-        "bash": {"*": "deny", "*validate_json.py*": "allow"},
+        "bash": {"*": "deny", "*common.py*": "allow"},
         "read": "allow",
         "glob": "allow",
         "list": "allow",
@@ -112,13 +112,13 @@ Broad `python*` / `blender*` patterns already cover new scripts.
 
 Add step with:
 
-- Config JSON the orchestrator should write (templated from `config.yaml` if needed)
+- Config JSON the orchestrator should write (templated from `configs/base.yaml` if needed)
 - Exact bash command
 - Skip condition (which output file to check)
 
 ### 4. Add config block (optional)
 
-If the script needs tunable settings, add a block to `config.yaml` and document it.
+If the script needs tunable settings, add a block to `configs/base.yaml` and document it.
 
 ---
 
@@ -147,7 +147,7 @@ Examples in the current pipeline:
 
 ### Change exit conditions
 
-Edit `config.yaml` `loop` block:
+Edit `configs/base.yaml` `loop` block:
 
 ```yaml
 loop:
@@ -169,7 +169,7 @@ Edit `initialize_placement.py` or geometry fields in `parts.json` (then delete `
 
 ## Adding a new config block
 
-1. Add block to `config.yaml` with comments
+1. Add block to `configs/base.yaml` with comments
 2. Document in orchestrator prompt how to template it into config JSONs
 3. Update docs Configuration page
 

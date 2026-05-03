@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "critic",
-  "description": "Critic score and structured feedback consumed by apply_critic.py.",
+  "description": "Critic score and structured feedback consumed by update_placement.py.",
   "type": "object",
   "additionalProperties": false,
   "required": ["iteration", "score", "pass", "summary", "issues", "per_view_notes"],
@@ -30,40 +30,40 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["component", "problem"],
+        "required": ["part", "problem"],
         "properties": {
-          "component": {
+          "part": {
             "type": "string",
             "description": "Part name the issue applies to."
           },
           "locked": {
             "type": "boolean",
-            "description": "True only if scale, position, and orientation are all correct; apply_critic.py must not change this component."
+            "description": "True only if scale, position, and orientation are all correct; update_placement.py must not change this part."
           },
           "problem": {
             "type": "string",
-            "description": "What is wrong with this component's placement."
+            "description": "What is wrong with this part's placement."
           },
           "corrected_world_size": {
             "type": "array",
             "items": {"type": "number", "exclusiveMinimum": 0},
             "minItems": 3,
             "maxItems": 3,
-            "description": "Target world dimensions [W, D, H] in metres. apply_critic.py assigns this directly to link.world_size in assembly.json."
+            "description": "Target world dimensions [W, D, H] in metres. update_placement.py assigns this directly to part.world_size in assembly.json."
           },
           "corrected_world_center": {
             "type": "array",
             "items": {"type": "number"},
             "minItems": 3,
             "maxItems": 3,
-            "description": "Target world-space centre [x, y, z] in metres. apply_critic.py assigns this directly to link.world_center in assembly.json."
+            "description": "Target world-space centre [x, y, z] in metres. update_placement.py assigns this directly to part.world_center in assembly.json."
           },
           "suggested_rotation_delta": {
             "type": "array",
             "items": {"type": "number"},
             "minItems": 3,
             "maxItems": 3,
-            "description": "Rotation change in degrees [drx, dry, drz] to add to link.rpy_deg in assembly.json."
+            "description": "Rotation change in degrees [drx, dry, drz] to add to part.euler_deg in assembly.json."
           }
         }
       }

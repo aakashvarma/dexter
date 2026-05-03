@@ -3,32 +3,32 @@
 ## Source of truth
 
 - The runnable entrypoint is the OpenCode `orchestrator` agent (`opencode.json` -> `.opencode/agents/orchestrator.md`); there is no standalone Python pipeline driver.
-- Trust executable/config files over prose: `opencode.json`, `.opencode/agents/*.md`, `config.yaml`, `tool_scripts/`, and `schemas/`.
+- Trust executable/config files over prose: `opencode.json`, `.opencode/agents/*.md`, `configs/base.yaml`, `tool_scripts/`, and `schemas/`.
 - Pipeline output lives in gitignored `.intermediate/<asset>/<NNN>/`; always list/read that run dir before resuming, and skip valid existing artifacts unless the user asks to redo them.
 
 ## Setup and commands
 
-- Setup: `pip install -r requirements.txt`; full pipeline runs also need authenticated `opencode`, `OPENAI_API_KEY` for component PNGs, `FAL_KEY` for fal.ai GLBs, and `blender` on `PATH` (or change `paths.blender_binary` in `config.yaml`).
+- Setup: `pip install -r requirements.txt`; full pipeline runs also need authenticated `opencode`, `OPENAI_API_KEY` for component PNGs, `FAL_KEY` for fal.ai GLBs, and `blender` on `PATH` (or change `paths.blender_binary` in `configs/base.yaml`).
 - Start a run through OpenCode, e.g. `opencode run --agent orchestrator -- "build the dishwasher from input_images/dishwasher.png"`; to resume, point the prompt at `.intermediate/<asset>/<NNN>/`.
-- There is no checked-in test/lint/typecheck/CI/pre-commit runner or Python package manifest beyond `requirements.txt`; focused verification is JSON-schema validation: `python tool_scripts/validate_json.py --schema schemas/<name>.schema.json --data <path>`.
+- There is no checked-in test runner or CI beyond `requirements.txt`; focused verification is JSON-schema validation (`python tool_scripts/common.py --schema schemas/<name>.schema.json --data <path>`) and `ruff check tool_scripts/` / `ruff format tool_scripts/` (see `README.md#tool-script-standards`).
 - Blender scripts require args after `--`, e.g. `blender --background --python tool_scripts/blender_assemble.py -- --layout <assembly.json> --output <assembled.blend>`.
 
 ## Pipeline order and gates
 
 - One-time placement inputs: `analyze` -> `parts.json` -> **human parts gate** -> `generate_components.py` -> `component_images/` + `component_glbs/` + `component_dims.json`. Each part needs a specific `name` matching its factual `description`; descriptions are copied into image prompts.
-- Placement loop under `iterations/<NNN>/`: `initialize_placement.py` writes `iterations/001/assembly.json`; later `assembly.json` files are written by `tool_scripts/apply_critic.py` applying critic corrections directly. Each iteration then runs `blender_assemble.py` -> `assembled.blend` -> orchestrator-written `render_views.json` -> `blender_render_views.py` -> `renders/` -> `critic` -> `critic.json`.
-- Stop the loop using `config.yaml` `loop.*`; after picking best iteration `B` (highest `critic.json` score), pause at the **human placement gate** before USD export.
+- Placement loop under `iterations/<NNN>/`: `initialize_placement.py` writes `iterations/001/assembly.json`; later `assembly.json` files are written by `tool_scripts/update_placement.py` applying critic corrections directly. Each iteration then runs `blender_assemble.py` -> `assembled.blend` -> orchestrator-written `render_views.json` -> `blender_render_views.py` -> `renders/` -> `critic` -> `critic.json`.
+- Stop the loop using `configs/base.yaml` `loop.*`; after picking best iteration `B` (highest `critic.json` score), pause at the **human placement gate** before USD export.
 - USD export runs after approval: `blender_export_usd.py` -> `robot.usda` (+ `robot_prim_map.json` + `textures/`). Skip if `robot.usda` already exists.
 - Final deliverable is `<run_dir>/robot.usda`; source geometry is `iterations/<B>/assembled.blend`.
 
 ## Agent/schema gotchas
 
 - OpenCode defines two subagents (`analyze`, `critic`); each writes exactly one requested artifact. Only the orchestrator owns ordering, retries, render views, stop conditions, and human gates.
-- Each subagent validates its own JSON output with `validate_json.py` (command and path are in each agent's instructions). The orchestrator validates `render_views.json` after writing it.
-- `assembly.json` stores world-space metric values per link: `world_size [W,D,H]` in metres, `world_center [x,y,z]` in metres, `rpy_deg [rx,ry,rz]` in degrees. `blender_assemble.py` derives Blender-native scale and origin.xyz at render time using `component_dims.json`.
-- `initialize_placement.py` writes both `placement_init.json` and `iterations/001/assembly.json`. `apply_critic.py` writes subsequent `assembly.json` files by assigning corrected world values directly, skipping `locked` links and accepting `--prev-assembly` as the best prior layout after regressions.
-- Critic `locked` means scale, position, and orientation are all correct; feedback is per-component via `corrected_world_size`, `corrected_world_center`, `suggested_rotation_delta`, or `locked`. `apply_critic.py` assigns these directly into the assembly (no back-computation, no `--dims` needed).
+- Each subagent validates its own JSON output with `common.py` (command and path are in each agent's instructions). The orchestrator validates `render_views.json` after writing it.
+- `assembly.json` stores world-space metric values per part in its `parts` array: `world_size [W,D,H]` in metres, `world_center [x,y,z]` in metres, `euler_deg [rx,ry,rz]` in degrees. `blender_assemble.py` derives the Blender node's local `node_scale` and `node_origin` at render time using `component_dims.json`.
+- `initialize_placement.py` writes both `placement_init.json` and `iterations/001/assembly.json` (validates both against their schemas). `update_placement.py` writes subsequent `assembly.json` files by assigning corrected world values directly, skipping `locked` parts and accepting `--prev-assembly` as the best prior layout after regressions.
+- Critic `locked` means scale, position, and orientation are all correct; feedback is per-component via `corrected_world_size`, `corrected_world_center`, `suggested_rotation_delta`, or `locked`. `update_placement.py` assigns these directly into the assembly (no back-computation, no `--dims` needed).
 - Render views are four auto-framed cameras (`front`, `top`, `left`, `isometric`) using `direction`, `output`, `light_energy`, and `light_type`; do not add `location`/`look_at`.
-- Component assets are generated by the orchestrator running `tool_scripts/generate_components.py --run-dir <run_dir>`; the script reads `config.yaml`, generates PNGs from `<run_dir>/source.png`, GLBs via fal.ai, and `component_dims.json` via Blender.
-- Placement init is `tool_scripts/initialize_placement.py --run-dir <run_dir>`; paths come from `config.yaml` `placement_init` block. Root `world_dims`, per-part `open_angle_deg`, and `pullout_fraction` live in `parts.json` (written by analyze).
+- Component assets are generated by the orchestrator running `tool_scripts/generate_components.py --run-dir <run_dir>`; the script reads `configs/base.yaml`, generates PNGs from `<run_dir>/source.png`, GLBs via fal.ai, and `component_dims.json` via Blender.
+- Placement init is `tool_scripts/initialize_placement.py --run-dir <run_dir>`; paths come from `configs/base.yaml` `placement_init` block. Root `world_size` and per-part `world_size`, `world_center`, `euler_deg` live in `parts.json` (written by analyze); the script only derives Blender `node_scale` / `node_origin` from `component_dims.json`.
 - USD export keeps Blender Z-up (`convert_orientation=False`); textures are packed and extracted to `textures/` next to `robot.usda` so Isaac Sim can resolve material paths.
