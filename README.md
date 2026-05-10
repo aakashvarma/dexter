@@ -32,6 +32,8 @@ flowchart TD
 
 Two human gates pause the run: **parts review** (before 3D generation) and **placement review** (before USD export). The orchestrator resumes from disk and skips steps whose outputs already exist.
 
+Placement iterations are **append-only** — never delete `iterations/` or redo analyze, components, or placement init to tweak layout. After the placement gate, requested changes start a new iteration via the critic loop (`critic.json` → `update_placement.py` → assemble → render → critique).
+
 See the docs for stage-by-stage detail, agents, IRs, and schemas: [Agentic Loop](docs/pages/architecture/agentic-loop.mdx) · [Sample Run](docs/pages/sample-runs/dishwasher-example.mdx) · [Architecture](docs/pages/architecture/overview.mdx)
 
 ## Quick install
@@ -79,7 +81,7 @@ Resume or iterate on an existing run:
 opencode run --agent orchestrator -- "resume .intermediate/dishwasher/001/"
 ```
 
-Pipeline knobs (`min_loops`, `max_loops`, `score_threshold`, fal settings, render defaults) live in [`configs/base.yaml`](configs/base.yaml). Agent definitions are in [`opencode.json`](opencode.json); prompts under [`.opencode/agents/`](.opencode/agents/).
+Pipeline knobs (`loop.*`, `image_generation`, `placement_init`, `fal`, `render`, `usd`) live in [`configs/base.yaml`](configs/base.yaml). Agent definitions are in [`opencode.json`](opencode.json); prompts under [`.opencode/agents/`](.opencode/agents/).
 
 More: [Pipeline Run](docs/pages/getting-started/pipeline-run.mdx) · [Sample Run](docs/pages/sample-runs/dishwasher-example.mdx) · [Configuration](docs/pages/getting-started/configuration.mdx) · [Troubleshooting](docs/pages/sample-runs/troubleshooting.mdx)
 
@@ -91,7 +93,7 @@ More: [Pipeline Run](docs/pages/getting-started/pipeline-run.mdx) · [Sample Run
 | [Architecture](docs/pages/architecture/overview.mdx) | Agentic loop, agents, IR, schemas, tool scripts |
 | [Sample Runs](docs/pages/sample-runs/dishwasher-example.mdx) | End-to-end dishwasher walkthrough |
 | [Troubleshooting](docs/pages/sample-runs/troubleshooting.mdx) | Common failures and recovery |
-| [Developer Guide](docs/pages/contributing/overview.mdx) | Project structure, extending the pipeline, local dev |
+| [Developer Guide](docs/pages/contributing/overview.mdx) | Project structure, extending the pipeline, local dev, Ruff standards |
 
 ## Repo layout
 
@@ -99,10 +101,12 @@ More: [Pipeline Run](docs/pages/getting-started/pipeline-run.mdx) · [Sample Run
 dexter/
 ├── .opencode/agents/     # orchestrator + subagent prompts
 ├── configs/
-│   └── base.yaml         # loop, fal, render, USD settings
+│   └── base.yaml         # loop, image_generation, placement_init, fal, render, usd
 ├── opencode.json         # agent definitions and permissions
 ├── schemas/              # JSON Schema for pipeline artifacts
 ├── tool_scripts/         # Python + Blender pipeline scripts
+├── test_fixtures/        # valid/invalid JSON for schema validation
+├── pyproject.toml        # Ruff lint/format config for tool_scripts/
 ├── input_images/         # bundled source photos
 └── docs/                 # documentation site (Nextra)
 ```
@@ -168,7 +172,7 @@ if __name__ == "__main__":
 - Write: `write_json_file(path, data)` (indent 2, trailing newline, UTF-8)
 - Config: `load_yaml_config()` from `configs/base.yaml`
 - Component dims: `load_dims_map(data)` or `load_dims_file(run_dir)`
-- Validation: `validate_json_file()`, `exit_if_invalid_json()`; CLI: `python3 tool_scripts/common.py --schema … --data …`
+- Validation: `validate_json_file()`, `exit_if_invalid_json()`; CLI: `python3 tool_scripts/common.py --schema … --data …` (fixtures in `test_fixtures/`)
 
 ### User-facing output
 

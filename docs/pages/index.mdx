@@ -2,7 +2,7 @@
 
 **Dexter** (short for **dexterity**) is an agentic pipeline that turns a single product photograph into an **articulated 3D asset** ready for robotic simulation in NVIDIA Isaac Sim and similar stacks.
 
-Give it a reference image of an everyday object — a dishwasher, refrigerator, cabinet — and Dexter produces individual part meshes, a kinematic tree, joint definitions, and a URDF/USD package that simulators can load and actuate.
+Give it a reference image of an everyday object — a dishwasher, refrigerator, cabinet — and Dexter produces individual part meshes, a kinematic tree, joint definitions, and a USD package that simulators can load and actuate.
 
 ![Dexter cover](/assets/images/dexter/cover.png)
 
@@ -12,7 +12,7 @@ Training robot manipulation policies requires thousands of teleoperation traject
 
 Recent image-to-3D models (Hunyuan3D, SAM3D, etc.) can generate a mesh from a photo in minutes — but they output a **single solid shape** with no moving parts. A dishwasher generated this way is one fused block; you cannot open the door or pull out the rack in simulation.
 
-Dexter targets that bottleneck: given a reference image, it produces an **articulated asset** with separate part meshes, a layout IR, joint definitions, and exportable URDF/USD.
+Dexter targets that bottleneck: given a reference image, it produces an **articulated asset** with separate part meshes, a layout IR, joint definitions, and exportable USD (`robot.usda`).
 
 ## What Dexter produces
 

@@ -156,8 +156,7 @@ Each iteration lives in `iterations/NNN/`. Iteration 001's `assembly.json` comes
 | | |
 |---|---|
 | **Input** | Previous `assembly.json`, previous `critic.json` |
-| **Output** | Next `assembly.json` |
-| **Validates** | `schemas/assembly.schema.json` |
+| **Output** | Next `assembly.json` (validated against `schemas/assembly.schema.json`) |
 
 **Logic:** Copies the previous layout and applies critic corrections directly:
 

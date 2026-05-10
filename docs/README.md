@@ -10,7 +10,7 @@ Documentation site for the Dexter articulated-asset pipeline, built with [Nextra
 | **Architecture** | Overview, agentic loop, agents, IR, schemas, tools |
 | **Sample Runs** | End-to-end dishwasher walkthrough |
 | **Troubleshooting** | Common issues and recovery |
-| **Developer Guide** | Project structure, extending pipeline, local dev |
+| **Developer Guide** | Project structure, extending pipeline, local dev, Ruff standards |
 
 ## Development
 

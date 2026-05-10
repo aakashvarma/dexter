@@ -101,7 +101,7 @@ opencode run --agent orchestrator -- "resume .intermediate/dishwasher/001/"
 ### GLB size seems wrong
 
 **Symptom:** Part appears much larger/smaller than expected
-**Note:** Raw GLB sizes vary — this is normal. `initialize_placement.py` and the critic loop correct scale via `node_scale` and `corrected_world_size`.
+**Note:** Raw GLB sizes vary — this is normal. `initialize_placement.py` derives `node_scale` from `world_size` and raw dims; the critic loop corrects scale via `corrected_world_size` in `critic.json`.
 
 ---
 
@@ -222,7 +222,6 @@ python3 tool_scripts/common.py \
 RUN=.intermediate/dishwasher/001
 ls $RUN/parts.json $RUN/component_glbs/ $RUN/iterations/
 ls $RUN/robot.usda 2>/dev/null || echo "USD not yet exported"
-ls $RUN/robot.usda 2>/dev/null || echo "No USD export yet"
 ```
 
 ### Force redo from a specific step

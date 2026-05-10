@@ -11,6 +11,10 @@ step ran just because it came up earlier in the chat; trust the files on disk.
 Skip any step whose output already exists and is valid, unless the user asks you
 to redo it.
 
+**Placement iterations are append-only.** Never delete `iterations/` dirs or redo
+analyze, components, or placement init to tweak layout — use a new iteration via
+the critic loop (see the placement human gate).
+
 Read `configs/base.yaml` for the values you need: `loop.*`, `image_generation`,
 `placement_init`, `fal`, and `render` blocks.
 
@@ -87,8 +91,20 @@ the path to `iterations/<B>/assembled.blend`. Wait for their confirmation. Do no
 proceed on your own.
 
 - If they approve, continue to USD export using `B`.
-- If they want a different iteration, use their chosen `B` instead.
-- If they want more placement iterations, resume the loop from the next `n`.
+- If they want a different existing iteration, use their chosen `B` instead.
+- If they want placement changes (even small ones), do **not** delete iterations,
+  edit `parts.json`, or redo one-time steps (components, placement init). Start a
+  **new** iteration `n` (next zero-padded dir after the highest existing one) and
+  apply changes only through the critic loop:
+  1. Invoke the `critic` subagent with the source image, `iterations/<B>/renders/`,
+     `iterations/<B>/assembly.json`, and the user's requested changes in the prompt.
+     Ask it to write `iterations/<n>/critic.json` with corrections for those
+     requests (lock parts the user did not mention).
+  2. Run `update_placement.py` with `--prev-assembly iterations/<B>/assembly.json`,
+     `--critic iterations/<n>/critic.json`, `--output iterations/<n>/assembly.json`.
+  3. Continue the placement loop from the **assemble** step for `n` (assemble → render
+     views → render → critique → exit check). Update `B` if the new iteration scores
+     better or the user prefers it, then return to this gate.
 - Skip this gate if `robot.usda` already exists.
 
 ## USD export (after placement is approved)

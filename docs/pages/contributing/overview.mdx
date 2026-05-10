@@ -47,4 +47,4 @@ The natural next step for production: replace prompt orchestration with an expli
 4. Run a test pipeline on a bundled input image
 5. Update documentation if behavior changes
 
-There is no checked-in test runner, lint, or CI. Focused verification is JSON Schema validation and manual pipeline runs.
+There is no checked-in test runner or CI. Focused verification is JSON Schema validation (`python3 tool_scripts/common.py --schema … --data …`), Ruff lint/format on `tool_scripts/` (see [README#tool-script-standards](https://github.com/aakashvarma/dexter/blob/main/README.md#tool-script-standards)), and manual pipeline runs.

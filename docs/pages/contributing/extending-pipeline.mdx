@@ -89,7 +89,7 @@ Place in `tool_scripts/`. Include a module docstring with:
 Follow existing patterns:
 
 - `argparse` for CLI args
-- Config-driven scripts accept `--config <json>`
+- Run-directory scripts accept `--run-dir <path>` and read paths from `configs/base.yaml`
 - API keys from environment, never from config files
 - Idempotent where possible (skip existing outputs)
 
@@ -132,14 +132,14 @@ Human gates are enforced in the orchestrator prompt, not in code:
 After <step>, show the user <what to review>.
 Wait for their confirmation. Do not proceed on your own.
 
-- If they approve, write `<run_dir>/<gate_file>` and continue.
-- Skip this gate only if `<gate_file>` already exists.
+- If they approve, continue to <next step>.
+- Skip this gate only if <downstream artifact> already exists.
 ```
 
 Examples in the current pipeline:
 
-- Parts gate → waits before image generation
-- Placement gate → waits for user approval before USD export
+- Parts gate → waits before `generate_components.py`
+- Placement gate → waits for user approval before USD export; skip if `robot.usda` already exists
 
 ---
 

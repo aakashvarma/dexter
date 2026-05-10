@@ -24,8 +24,18 @@ image_generation:
   model: "gpt-image-2"
   size: "1024x1024"
   quality: "medium"
+  parts_file: parts.json
+  output_dir: component_images
+  reference_image: source.png
+
+placement_init:
+  parts_file: parts.json
+  dims_file: component_dims.json
+  output: placement_init.json
 
 fal:
+  output_dir: component_glbs
+  dims_output: component_dims.json
   endpoint: fal-ai/hunyuan-3d/v3.1/pro/image-to-3d
   generate_type: Normal
   enable_pbr: true
@@ -75,27 +85,44 @@ The orchestrator keeps the **best-scoring** iteration if a later one regresses.
 
 ## image_generation
 
-Read by `generate_components.py` when generating component PNGs.
+Read by `generate_components.py` when generating component PNGs. Paths are relative to `<run_dir>/`.
 
-| Key | Default | Options |
-|-----|---------|---------|
+| Key | Default | Options / description |
+|-----|---------|----------------------|
 | `background_instruction` | white background text | Appended to every component prompt |
 | `model` | `gpt-image-2` | `gpt-image-2`, `dall-e-3` |
 | `size` | `1024x1024` | `1024x1024`, `1536x1024`, `1024x1536` |
 | `quality` | `medium` | `low`, `medium`, `high` |
+| `parts_file` | `parts.json` | Part list written by analyze |
+| `output_dir` | `component_images` | Directory for isolated PNGs |
+| `reference_image` | `source.png` | Reference photo passed to every `images.edit()` call |
 
-## fal
+## placement_init
 
-Read by `generate_components.py` when generating component GLBs.
+Read by `initialize_placement.py`. Paths are relative to `<run_dir>/`.
 
 | Key | Default | Description |
 |-----|---------|-------------|
+| `parts_file` | `parts.json` | World-space sizes and poses from analyze |
+| `dims_file` | `component_dims.json` | Raw GLB bounding boxes from `generate_components.py` |
+| `output` | `placement_init.json` | Pre-computed scales and Blender node offsets |
+
+The script also writes `iterations/001/assembly.json` (not configurable).
+
+## fal
+
+Read by `generate_components.py` when generating component GLBs. Paths are relative to `<run_dir>/`.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `output_dir` | `component_glbs` | Directory for per-part GLB meshes |
+| `dims_output` | `component_dims.json` | Raw mesh measurements (via `blender_measure_glbs.py`) |
 | `endpoint` | `fal-ai/hunyuan-3d/v3.1/pro/image-to-3d` | fal.ai model |
 | `generate_type` | `Normal` | Passed to fal API |
 | `enable_pbr` | `true` | PBR materials on meshes |
 | `face_count` | `40000` | Target mesh density |
 | `download_timeout_seconds` | `300` | GLB download timeout |
-| `image_extensions` | `[".png", ...]` | Extensions to pick up |
+| `image_extensions` | `[".png", ...]` | Extensions to pick up from `component_images/` |
 
 ## render
 

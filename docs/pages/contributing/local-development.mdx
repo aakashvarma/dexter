@@ -176,10 +176,20 @@ image_generation:
 
 Do not commit dev-only config unless the team agrees.
 
+## Linting tool scripts
+
+```bash
+ruff check tool_scripts/
+ruff format tool_scripts/
+```
+
+Configuration lives in `pyproject.toml` at the repo root.
+
 ## What to verify before submitting changes
 
-1. `python3 tool_scripts/common.py` passes on any changed schemas with valid fixtures
-2. Agent prompt changes tested with at least one pipeline step
-3. Tool script changes tested with `--help` and a real run against `.intermediate/` artifacts
-4. `npm run build` passes in `docs/` if documentation changed
-5. `AGENTS.md` updated if pipeline order or semantics changed
+1. `python3 tool_scripts/common.py` passes on any changed schemas with valid fixtures in `test_fixtures/`
+2. `ruff check tool_scripts/` and `ruff format tool_scripts/` pass if scripts changed
+3. Agent prompt changes tested with at least one pipeline step
+4. Tool script changes tested with `--help` and a real run against `.intermediate/` artifacts
+5. `npm run build` passes in `docs/` if documentation changed
+6. `AGENTS.md` updated if pipeline order or semantics changed

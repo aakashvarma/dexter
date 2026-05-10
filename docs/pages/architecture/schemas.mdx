@@ -69,9 +69,9 @@ Per part hint: `name`, `joint_type`, `node_scale`, `pose` (`world_center`, `node
 
 Required: `resolution` `[w,h]`, `samples`, `engine`, `file_format`, `cameras`.
 
-Per camera — required: `name`, `direction` `[x,y,z]`, `output`, `light_energy`, `light_type`.
+Per camera — required: `name`, `direction` `[x,y,z]`, `output`, `light_energy`, `light_type`. Optional: `margin` (padding factor, defaults to 1.3).
 
-**Do not add `location` or `look_at`** — the render script auto-frames.
+**Do not add `location` or `look_at`** — the render script auto-frames from `direction`.
 
 ## component_dims.schema.json
 
