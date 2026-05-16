@@ -1,6 +1,4 @@
 {
   "requirements": "Requirements",
-  "installation": "Installation",
-  "configuration": "Configuration",
-  "pipeline-run": "Pipeline Run"
+  "installation": "Installation & Run"
 }

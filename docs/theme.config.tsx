@@ -1,14 +1,20 @@
 import React from 'react'
 import { DocsThemeConfig } from 'nextra-theme-docs'
+import { Footer } from './components/Footer'
 
 const config: DocsThemeConfig = {
-  logo: <span><strong>Dexter</strong> Docs</span>,
+  logo: (
+    <span className="dexter-logo">
+      <strong>Dexter</strong> Docs
+    </span>
+  ),
   project: {
     link: 'https://github.com/aakashvarma/dexter',
   },
   docsRepositoryBase: 'https://github.com/aakashvarma/dexter/tree/main/docs',
   footer: {
-    text: 'Dexter — Articulated Asset Agent System',
+    component: Footer,
+    text: '',
   },
   primaryHue: 210,
   sidebar: {

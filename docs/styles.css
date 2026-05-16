@@ -1,19 +1,167 @@
-/* Per-page hierarchical heading numbers (h1 = page title, unnumbered) */
+/* Typography — Inter, tight tracking, medium headings */
+:root {
+  --font-sans: var(--font-inter), system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+}
+
+.dexter-docs,
+.dexter-docs body {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 .nextra-content {
+  font-family: var(--font-sans);
+  letter-spacing: -0.01em;
   counter-reset: h2;
 }
 
+.nextra-content h1 {
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
 .nextra-content h2 {
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
   counter-reset: h3;
 }
 
+.nextra-content h3 {
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  counter-reset: h4;
+}
+
+.nextra-content h4 {
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.nextra-content strong {
+  font-weight: 600;
+}
+
+.nextra-nav-container,
+.nextra-sidebar-container,
+.nextra-toc {
+  font-family: var(--font-sans);
+  letter-spacing: -0.01em;
+}
+
+.nextra-sidebar-container a[data-active='true'] {
+  font-weight: 500;
+}
+
+.dexter-logo {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+/* Cyberfont — self-hosted from docs/public/fonts/Cyberfont.woff */
+@font-face {
+  font-family: 'Cyberfont';
+  src: url('/fonts/Cyberfont.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Intro page title */
+.nextra-content .dexter-intro-title {
+  font-family: 'Cyberfont', sans-serif;
+  font-weight: 400;
+  font-size: clamp(2.75rem, 8vw, 4.25rem);
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+  margin-bottom: 1.25rem;
+  color: #fcee0a;
+  text-shadow:
+    -2px 2px 0 #00e5ff,
+    -4px 4px 0 rgba(0, 229, 255, 0.4);
+}
+
+html.dark .nextra-content .dexter-intro-title {
+  color: #fcee0a;
+}
+
+/* Footer banner */
+.dexter-footer {
+  margin-top: 3rem;
+  padding: 0 max(env(safe-area-inset-right), 1.5rem) calc(1.5rem + env(safe-area-inset-bottom))
+    max(env(safe-area-inset-left), 1.5rem);
+  background: transparent;
+}
+
+.dexter-footer-inner {
+  max-width: 90rem;
+  margin: 0 auto;
+}
+
+.dexter-footer-banner {
+  position: relative;
+  overflow: hidden;
+  border-radius: 16px;
+}
+
+.dexter-footer-banner::before,
+.dexter-footer-banner::after {
+  display: none;
+  content: none;
+}
+
+.dexter-footer-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 280px;
+  object-fit: cover;
+  object-position: center;
+}
+
+.dexter-footer-label {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  padding: 1.75rem 2.25rem;
+  font-family: var(--font-sans);
+  font-size: clamp(2.75rem, 7vw, 4.5rem);
+  font-weight: 500;
+  color: #fff;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  pointer-events: none;
+}
+
+.dexter-footer-tagline {
+  margin: 1rem 0 0;
+  font-size: 0.8125rem;
+  color: #5f6368;
+  text-align: center;
+}
+
+html.dark .dexter-footer-tagline {
+  color: #9aa0a6;
+}
+
+/* Rounded corners on all content images and videos */
+.nextra-content img,
+.nextra-content video {
+  border-radius: 12px;
+}
+
+/* Per-page hierarchical heading numbers (h1 = page title, unnumbered) */
 .nextra-content h2::before {
   counter-increment: h2;
   content: counter(h2) '. ';
-}
-
-.nextra-content h3 {
-  counter-reset: h4;
 }
 
 .nextra-content h3::before {
@@ -24,4 +172,61 @@
 .nextra-content h4::before {
   counter-increment: h4;
   content: counter(h2) '.' counter(h3) '.' counter(h4) ' ';
+}
+
+/* Dark mode — pure black surfaces */
+html.dark {
+  background-color: #000;
+  color-scheme: dark;
+}
+
+html.dark body,
+html.dark .dexter-docs {
+  background-color: #000;
+}
+
+html.dark .nextra-nav-container,
+html.dark .nextra-nav-container-blur {
+  background-color: #000 !important;
+  backdrop-filter: none !important;
+}
+
+html.dark .nextra-sidebar-container {
+  background-color: #000 !important;
+  border-color: #1a1a1a !important;
+}
+
+html.dark .dark\:nx-bg-dark,
+html.dark .dark\:nx-bg-neutral-900 {
+  background-color: #000 !important;
+}
+
+html.dark .dark\:nx-bg-neutral-800 {
+  background-color: #0a0a0a !important;
+}
+
+html.dark .dark\:nx-border-neutral-800 {
+  border-color: #1a1a1a !important;
+}
+
+html.dark .nextra-content pre {
+  background-color: #0a0a0a !important;
+  border-color: #1a1a1a !important;
+}
+
+html.dark .nextra-content table {
+  border-color: #1a1a1a !important;
+}
+
+html.dark .nextra-content thead th {
+  background-color: #0a0a0a !important;
+  border-color: #1a1a1a !important;
+}
+
+html.dark .nextra-content tbody td {
+  border-color: #1a1a1a !important;
+}
+
+html.dark .nextra-content hr {
+  border-color: #1a1a1a !important;
 }

@@ -10,25 +10,7 @@ Browse locally: `cd docs && npm i && npm run dev` → http://localhost:3000
 
 ## Agentic loop
 
-```mermaid
-flowchart TD
-    analyze["analyze subagent\nsource.png → parts.json"] --> gate1{"Human gate:\nconfirm parts.json"}
-    gate1 --> components["generate_components.py\n→ component_images/\ncomponent_glbs/\ncomponent_dims.json"]
-    components --> init["initialize_placement.py\n→ placement_init.json\niterations/001/assembly.json"]
-
-    subgraph placeLoop ["Placement ↔ Critic loop · iterations/NNN/"]
-        init --> assemble["blender_assemble.py\n→ assembled.blend"]
-        apply["update_placement.py\n→ assembly.json"] --> assemble
-        assemble --> renderplan["render_views.json"]
-        renderplan --> render["blender_render_views.py\n→ renders/"]
-        render --> critique["critic subagent\n→ critic.json"]
-        critique --> decide{"Stop?"}
-        decide -->|no| apply
-    end
-
-    decide -->|yes, best B| gate2{"Human gate:\nconfirm placement"}
-    gate2 --> usd["blender_export_usd.py\n→ robot.usda"]
-```
+![OpenCode agent harness](docs/public/assets/images/dexter/opencode_agent_harness.png)
 
 Two human gates pause the run: **parts review** (before 3D generation) and **placement review** (before USD export). The orchestrator resumes from disk and skips steps whose outputs already exist.
 
@@ -83,14 +65,14 @@ opencode run --agent orchestrator -- "resume .intermediate/dishwasher/001/"
 
 Pipeline knobs (`loop.*`, `image_generation`, `placement_init`, `fal`, `render`, `usd`) live in [`configs/base.yaml`](configs/base.yaml). Agent definitions are in [`opencode.json`](opencode.json); prompts under [`.opencode/agents/`](.opencode/agents/).
 
-More: [Pipeline Run](docs/pages/getting-started/pipeline-run.mdx) · [Sample Run](docs/pages/sample-runs/dishwasher-example.mdx) · [Configuration](docs/pages/getting-started/configuration.mdx) · [Troubleshooting](docs/pages/sample-runs/troubleshooting.mdx)
+More: [Installation & Run](docs/pages/getting-started/installation.mdx) · [Sample Run](docs/pages/sample-runs/dishwasher-example.mdx) · [Troubleshooting](docs/pages/sample-runs/troubleshooting.mdx)
 
 ## Documentation
 
 | Section | Topics |
 |---------|--------|
-| [Getting Started](docs/pages/getting-started/requirements.mdx) | Requirements, installation, configuration, pipeline run |
-| [Architecture](docs/pages/architecture/overview.mdx) | Agentic loop, agents, IR, schemas, tool scripts |
+| [Getting Started](docs/pages/getting-started/requirements.mdx) | Requirements, installation & run |
+| [Architecture](docs/pages/architecture/overview.mdx) | Overview, agentic loop, agents, IRs, tool scripts |
 | [Sample Runs](docs/pages/sample-runs/dishwasher-example.mdx) | End-to-end dishwasher walkthrough |
 | [Troubleshooting](docs/pages/sample-runs/troubleshooting.mdx) | Common failures and recovery |
 | [Developer Guide](docs/pages/contributing/overview.mdx) | Project structure, extending the pipeline, local dev, Ruff standards |

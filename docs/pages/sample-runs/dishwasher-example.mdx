@@ -1,10 +1,6 @@
 # Sample Run: Dishwasher
 
-This page walks through one full run on `input_images/dishwasher.png` → `.intermediate/dishwasher/001/`. It explains what each agent and tool does, what it reads and writes, and how the files appear on disk.
-
-For how to start or resume a run, see [Pipeline Run](/getting-started/pipeline-run).
-
-## Overview
+This page follows one run from `input_images/dishwasher.png` to `.intermediate/dishwasher/001/`. Steps appear in the order the orchestrator runs them. For how to start or resume, see [Installation & Run](/getting-started/installation).
 
 ```mermaid
 flowchart TD
@@ -25,35 +21,22 @@ flowchart TD
     gate2 --> usd["blender_export_usd\n→ robot.usda"]
 ```
 
-Four parts were identified: `dishwasher_cabinet`, `front_door`, `upper_dish_rack`, `lower_dish_rack`.
+The run identified four parts: `dishwasher_cabinet`, `front_door`, `upper_dish_rack`, and `lower_dish_rack`.
 
----
+## 1. Start the run
 
-## Agents
+You prompt the orchestrator in OpenCode. It copies the input image to `source.png` under `.intermediate/dishwasher/001/` and checks which files already exist before each step.
 
-Agents handle judgment. Subagents each write one JSON file; the orchestrator sequences everything else.
+## 2. analyze subagent
 
-### Orchestrator
-
-You interact with the orchestrator only. It lists the run directory before each step, invokes subagents, runs tool scripts, writes `render_views.json` each iteration, tracks the best critic score, and pauses at two human gates.
-
-| Role | Details |
-|------|---------|
-| **Reads** | `configs/base.yaml`, existing run artifacts |
-| **Writes** | `render_views.json` per iteration; copies `source.png` at run start |
-| **Decides** | Which step to run next, loop exit, best iteration `B` |
-
-### analyze
+The analyze subagent reads `source.png` and writes `parts.json`. Each entry has a name, description, parent part, joint type, and size and pose in metres.
 
 | | |
 |---|---|
 | **Input** | `source.png` |
 | **Output** | `parts.json` |
-| **Validates** | `schemas/parts.schema.json` |
 
-**Logic:** Decomposes the photo into named moving parts. Each entry gets a description (used in image prompts), parent part name, joint type, and numeric placement: `world_size`, `world_center`, and `euler_deg` (the pose shown in the source image).
-
-**In this run:** Cabinet (fixed root, ~0.60 × 0.60 × 0.85 m), front door (revolute, closed), two racks (fixed inside cavity, closed).
+In this run the cabinet is the fixed root (~0.60 × 0.60 × 0.85 m). The front door is revolute and closed. Both racks are fixed inside the cavity.
 
 ```json
 {
@@ -69,35 +52,20 @@ You interact with the orchestrator only. It lists the run directory before each 
 
 ![Source input image](/assets/images/dexter/run/source.png)
 
-The orchestrator stops here until you confirm names, joint types, and placement numbers.
+## 3. Parts review
 
-### critic
+The orchestrator pauses. You confirm part names, joint types, and placement numbers before any 3D generation runs.
 
-| | |
-|---|---|
-| **Input** | `source.png`, four renders, `assembly.json` |
-| **Output** | `critic.json` |
-| **Validates** | `schemas/critic.schema.json` |
+## 4. generate_components.py
 
-**Logic:** Compares renders to the source photo. For each part it judges scale (`world_size`), position (`world_center`), and orientation (`euler_deg`) independently. Correct parts get `locked: true`. Others get `corrected_world_size`, `corrected_world_center`, and/or `suggested_rotation_delta`. Visible overlap is penalized; scale and position errors weigh equally.
-
-**In this run (iteration 1, score 72):** Cabinet and door were fine. Both racks were shifted sideways and clipped through the side walls — critic returned `corrected_world_center` for each. After five more rounds, iteration 6 reached score 86.
-
----
-
-## Tools — one-time setup
-
-### generate_components.py
+This script runs once after parts approval. For each part it builds an image prompt from the description, calls OpenAI to produce an isolated PNG (using `source.png` as reference), sends the PNG to fal.ai for a GLB, and measures raw mesh bounds with Blender.
 
 | | |
 |---|---|
-| **Input** | `parts.json`, `source.png`, `configs/base.yaml` |
-| **Output** | `component_images/<part>.png`, `component_glbs/<part>.glb`, `component_dims.json` |
-| **Requires** | `OPENAI_API_KEY`, `FAL_KEY`, Blender |
+| **Input** | `parts.json`, `source.png` |
+| **Output** | `component_images/`, `component_glbs/`, `component_dims.json` |
 
-**Logic:** For each part, builds an image prompt from the description, calls OpenAI image edit with `source.png` as reference to produce an isolated PNG, sends that PNG to fal.ai for a GLB mesh, then measures each GLB's raw bounding box via `blender_measure_glbs.py`. Skips parts whose outputs already exist; skips the whole step if `component_dims.json` exists.
-
-**In this run:** Four PNGs and four GLBs. Raw mesh sizes in `component_dims.json` are pre-scale (e.g. a door GLB might be 0.93 m wide even though the real door is 0.60 m).
+Four PNGs and four GLBs were written. Raw sizes in `component_dims.json` are pre-scale. A door GLB might measure 0.93 m wide while the target door width is 0.60 m. Placement steps correct that later.
 
 ![Four part renders on white background](/assets/images/dexter/part_renders.png)
 
@@ -105,75 +73,59 @@ The orchestrator stops here until you confirm names, joint types, and placement 
   <source src="/assets/video/dexter/component_glbs.mp4" type="video/mp4" />
 </video>
 
-### initialize_placement.py
+## 5. initialize_placement.py
+
+This script reads poses from `parts.json` and raw mesh sizes from `component_dims.json`. It writes `placement_init.json` and `iterations/001/assembly.json`. No subagent is involved.
 
 | | |
 |---|---|
-| **Input** | `parts.json`, `component_dims.json`, `configs/base.yaml` |
+| **Input** | `parts.json`, `component_dims.json` |
 | **Output** | `placement_init.json`, `iterations/001/assembly.json` |
-| **Validates** | `schemas/placement_init.schema.json`, `schemas/assembly.schema.json` |
 
-**Logic:** Reads world-space `world_size`, `world_center`, and `euler_deg` from `parts.json`, then combines them with raw mesh sizes from `component_dims.json` to compute Blender `node_scale` and `node_origin`. Fully deterministic — no LLM. Validates both output files against their schemas.
+The cabinet sits at the origin at metre scale. The door and racks use the closed poses from `parts.json`.
 
-**In this run:** Cabinet at origin with correct metre scale. Door and racks placed at the closed poses from `parts.json`.
+## 6. Placement loop
 
----
+Each round lives in `iterations/NNN/`. Iteration 001 uses the assembly from step 5. Later iterations start with `update_placement.py`, which applies the previous `critic.json` to produce the next `assembly.json`.
 
-## Tools — placement loop
+### 6a. blender_assemble.py
 
-Each iteration lives in `iterations/NNN/`. Iteration 001's `assembly.json` comes from `initialize_placement.py`; later ones from `update_placement.py`.
-
-### blender_assemble.py
+Loads each GLB, parents parts in the kinematic tree, and positions meshes to match `world_size`, `world_center`, and `euler_deg` in `assembly.json`.
 
 | | |
 |---|---|
-| **Input** | `assembly.json` (loads `component_dims.json` via the `root` path inside it) |
+| **Input** | `assembly.json` |
 | **Output** | `assembled.blend` |
 
-**Logic:** Imports each part's GLB, parents parts in the kinematic tree, and positions each mesh so its world bounding box matches the part's `world_size`, `world_center`, and `euler_deg`. Raw GLB dimensions are used internally to derive Blender scale and pivot.
+### 6b. render_views.json
 
-### render_views.json (orchestrator)
+The orchestrator writes four camera definitions (front, top, left, isometric) from `configs/base.yaml` render defaults.
 
 | | |
 |---|---|
-| **Input** | `configs/base.yaml` `render` defaults |
 | **Output** | `iterations/NNN/render_views.json` |
-| **Validates** | `schemas/render_views.schema.json` |
 
-**Logic:** Four auto-framed cameras (`front`, `top`, `left`, `isometric`) with direction vectors and lighting. Written by the orchestrator each iteration.
+### 6c. blender_render_views.py
 
-### blender_render_views.py
+Renders one PNG per camera from the assembled scene.
 
 | | |
 |---|---|
 | **Input** | `assembled.blend`, `render_views.json` |
-| **Output** | `iterations/NNN/renders/*.png` |
+| **Output** | `renders/*.png` |
 
-**Logic:** Renders one PNG per camera. These images are what the critic compares against the source photo.
+### 6d. critic subagent
 
-### update_placement.py (iteration 2+)
+The critic subagent receives `source.png`, the four renders, and `assembly.json`. It writes `critic.json` with a score and per-part corrections. Correct parts are marked `locked`. Others may get `corrected_world_size`, `corrected_world_center`, or `suggested_rotation_delta`.
 
 | | |
 |---|---|
-| **Input** | Previous `assembly.json`, previous `critic.json` |
-| **Output** | Next `assembly.json` (validated against `schemas/assembly.schema.json`) |
+| **Input** | `source.png`, `renders/`, `assembly.json` |
+| **Output** | `critic.json` |
 
-**Logic:** Copies the previous layout and applies critic corrections directly:
+### Iteration 1 (score 72)
 
-- `corrected_world_size` → replaces `world_size`
-- `corrected_world_center` → replaces `world_center`
-- `suggested_rotation_delta` → added to `euler_deg`
-- `locked: true` or no entry → unchanged
-
-After a score regression the orchestrator can pass the best-scoring layout as `--prev-assembly` instead of the most recent one.
-
----
-
-## Iteration results (this run)
-
-### Iteration 1 — score 72
-
-First layout from `initialize_placement.py`. Cabinet and door were reasonable; both racks were offset laterally and protruded through the side walls.
+The first layout came from `initialize_placement.py`. The cabinet and door were acceptable. Both racks were offset sideways and clipped through the side walls.
 
 ![Iteration 1 isometric render](/assets/images/dexter/run/iter_001_isometric.png)
 
@@ -186,7 +138,11 @@ First layout from `initialize_placement.py`. Cabinet and door were reasonable; b
 | `upper_dish_rack` | `corrected_world_center` |
 | `lower_dish_rack` | `corrected_world_center` |
 
-### Iteration 6 — score 86 (best)
+### 6e. update_placement.py (iteration 2 onward)
+
+Copies the previous layout and applies critic corrections. Locked parts and parts with no issue entry are unchanged. If a round scores lower than the best so far, the orchestrator can base the next assembly on the best prior layout instead of the most recent one.
+
+The loop ran six times. Iteration 6 scored highest at 86.
 
 | Iteration | Score | Main issue |
 |-----------|-------|------------|
@@ -203,41 +159,23 @@ First layout from `initialize_placement.py`. Cabinet and door were reasonable; b
 
 ![Iteration 6 left render](/assets/images/dexter/run/iter_006_left.png)
 
-The orchestrator kept iteration 6 (highest score) for placement review and export.
+The orchestrator selected iteration 6 for placement review.
 
----
+## 7. Placement review
 
-## Tools — export
+You review renders from the best iteration, the critic score, and `assembled.blend`. The orchestrator waits for approval before export.
 
-### blender_export_usd.py
+## 8. blender_export_usd.py
+
+Exports the approved `assembled.blend` to `robot.usda`, writes `robot_prim_map.json`, and extracts textures to `textures/`.
 
 | | |
 |---|---|
-| **Input** | Approved `iterations/<B>/assembled.blend`, `configs/base.yaml` `usd.root_prim_path` |
+| **Input** | `iterations/006/assembled.blend` |
 | **Output** | `robot.usda`, `robot_prim_map.json`, `textures/` |
-
-**Logic:** Exports the Blender scene to USD with Z-up orientation for Isaac Sim. Embedded textures are extracted to `textures/`. Runs only after you approve a layout at the placement gate.
 
 <video controls width="100%">
   <source src="/assets/video/dexter/dishwasher_blender_animation.mp4" type="video/mp4" />
 </video>
 
----
-
-## How the pieces connect
-
-| Step | Actor | Reads | Writes |
-|------|-------|-------|--------|
-| 1 | analyze | `source.png` | `parts.json` |
-| 2 | generate_components | `parts.json`, `source.png` | `component_images/`, `component_glbs/`, `component_dims.json` |
-| 3 | initialize_placement | `parts.json`, `component_dims.json` | `placement_init.json`, `iterations/001/assembly.json` |
-| 4a | blender_assemble | `assembly.json` | `assembled.blend` |
-| 4b | orchestrator | `configs/base.yaml` | `render_views.json` |
-| 4c | blender_render_views | `assembled.blend`, `render_views.json` | `renders/` |
-| 4d | critic | `source.png`, `renders/`, `assembly.json` | `critic.json` |
-| 4e | update_placement | prior `assembly.json`, `critic.json` | next `assembly.json` |
-| 5 | blender_export_usd | approved `assembled.blend` | `robot.usda`, `textures/` |
-
-Steps 4a–4e repeat until the loop exits. Step 4e is skipped for iteration 001.
-
-See [Agents](/architecture/agents), [Tool Scripts](/architecture/tools), and [Intermediate Representation](/architecture/intermediate-representation) for field-level detail.
+For schema fields, agent permissions, and script flags, see [Agentic Loop](/architecture/agentic-loop).

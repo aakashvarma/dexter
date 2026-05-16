@@ -1,83 +1,155 @@
 # Architecture Overview
 
-Dexter is an **orchestrator-driven agentic pipeline**. One primary OpenCode agent coordinates deterministic tool scripts and two specialized subagents. There is no standalone Python pipeline driver — the orchestrator agent is the only entrypoint.
+Dexter turns one product photo into an articulated 3D asset — separate meshes for each moving part, arranged in the right poses, exported as USD for simulators like NVIDIA Isaac Sim.
 
-## System diagram
+You do not run a long shell script or click through a GUI wizard. You talk to an **orchestrator agent** in OpenCode. It reads your image, calls specialist agents when judgment is needed, runs Python and Blender scripts for everything else, and pauses twice so you can review the result before expensive steps continue.
+
+This page explains the flow at a high level. For field-level detail on agents, JSON artifacts, and tool scripts, see [Agentic Loop](/architecture/agentic-loop).
+
+---
+
+## What you start with
+
+You give Dexter a single reference photo — a dishwasher, refrigerator, cabinet, or similar everyday object. The photo should show the object clearly, ideally with articulation visible (a door open, a drawer pulled out).
+
+![Dishwasher input photo](/assets/images/dexter/dishwasher_input.png)
+
+*A typical input: one product photo with visible moving parts.*
+
+The orchestrator copies this image into a run folder (`.intermediate/<asset>/<NNN>/source.png`) and works from there. Everything the pipeline produces — JSON files, meshes, renders, blends — accumulates in that folder.
+
+---
+
+## Who does the work
+
+Dexter splits work between **agents** (LLM judgment) and **tool scripts** (deterministic code). One orchestrator sits in the middle and owns the full sequence.
 
 ![OpenCode agent harness](/assets/images/dexter/opencode_agent_harness.png)
 
-### User and orchestrator agent
+*You prompt the orchestrator. It routes work to two subagents and runs tool scripts for the rest.*
 
-You provide a prompt — for example, *"build the dishwasher from `input_images/dishwasher.png`"*. The **orchestrator agent** is the only entrypoint (`opencode.json` → `orchestrator` agent). It reads `configs/base.yaml`, probes `.intermediate/<asset>/<NNN>/` for existing artifacts, decides which step to run next, and invokes subagents through OpenCode's Task tool. Subagents never talk to each other; the orchestrator agent passes context between them.
+| Piece | What it does |
+|-------|----------------|
+| **Orchestrator** | Decides which step runs next, invokes subagents and scripts, tracks the best layout, pauses at human gates |
+| **analyze subagent** | Looks at the photo and writes a part list (`parts.json`) |
+| **critic subagent** | Compares rendered views to the photo and writes layout fixes (`critic.json`) |
+| **Tool scripts** | Generate images and meshes, place parts in Blender, render views, export USD |
 
-### Subagents
+Subagents never talk to each other. The orchestrator passes files between them. There is no standalone Python pipeline driver — the orchestrator prompt is the entrypoint.
 
-Each subagent writes **one artifact** and exits:
+---
 
-| Subagent | Role | Output |
-|----------|------|--------|
-| **analyze subagent** | Reads the source image and decomposes the object into moving parts | `parts.json` |
-| **critic subagent** | Scores rendered views against the source image and writes corrections | `critic.json` per iteration |
+## The flow, step by step
 
-Between subagent steps the orchestrator agent runs **tool scripts** directly: `generate_components.py`, `initialize_placement.py`, `update_placement.py`, `blender_assemble.py`, `blender_render_views.py`, and finally `blender_export_usd.py`.
+### 1. Name the parts
 
-**Human gates**: you review `parts.json` before any 3D generation, and the best placement iteration before USD export.
+The **analyze** subagent studies `source.png` and breaks the object into moving parts: a cabinet body, a door, racks, drawers, and so on. For each part it records a name, a short description, how it connects to its parent, and a joint type (fixed, revolute, prismatic).
 
-**Placement ↔ critic loop**: iteration 001's `assembly.json` comes from `initialize_placement.py`. Later iterations use `update_placement.py` to apply critic corrections directly to world-space values. Each round assembles, renders four views, and the critic subagent scores the result. The loop stops when `configs/base.yaml` exit conditions are met; the orchestrator agent keeps the best-scoring iteration.
+It also writes initial size and pose numbers — how big each part is in metres and where it sits in the photo. All of this lands in `parts.json`.
 
-### Model runtime
+### 2. You review the part list
 
-Subagents reason through your logged-in OpenCode model (Codex OAuth). Model names are not hardcoded in the repo — the harness handles LLM calls; Dexter's prompts and permissions live in `.opencode/agents/*.md`.
+Before any 3D APIs are called, the orchestrator stops and shows you `parts.json`. This is the first **human gate**. You confirm that part names make sense, descriptions are accurate, and joint types match what you see in the photo. If something is wrong, you edit or ask for changes before continuing.
 
-### Tools
+### 3. Build a mesh for each part
 
-Deterministic code the orchestrator agent runs via bash:
+Once you approve the parts, `generate_components.py` runs. For every part it:
 
-- **Component generation** — `generate_components.py` (`OPENAI_API_KEY`, `FAL_KEY`) + `blender_measure_glbs.py`
-- **Placement init** — `initialize_placement.py` builds `placement_init.json` and `iterations/001/assembly.json`
-- **Placement refinement** — `update_placement.py` applies critic corrections directly to `assembly.json` world-space values
-- **Blender** — assemble scenes, render critique views, export USD
+1. Generates an isolated PNG of just that part (OpenAI)
+2. Converts the PNG into a 3D mesh (fal.ai)
+3. Measures the raw mesh size (Blender)
 
-### Outputs
+The outputs are `component_images/`, `component_glbs/`, and `component_dims.json`. Each part gets its own GLB file.
 
-The pipeline produces two deliverables:
+![Component part renders](/assets/images/dexter/part_renders.png)
 
-1. **Articulated asset** — per-part GLBs assembled under a parent-child hierarchy, exported as `robot.usda` (+ `textures/`) for Isaac Sim
-2. **Blender output** — `iterations/<B>/assembled.blend`, the best visual assembly from the critic loop
+*Isolated part images feed image-to-3D models — one mesh per moving part.*
 
-All intermediate files accumulate under `.intermediate/<asset>/<NNN>/`. See [Pipeline Run](/getting-started/pipeline-run) for how to start or resume a run, and [Sample Run: Dishwasher](/sample-runs/dishwasher-example) for a full walkthrough with example outputs.
+### 4. Place parts in the scene
 
-## Architecture sections
+`initialize_placement.py` combines the sizes from `parts.json` with the raw mesh measurements to build the first layout: `iterations/001/assembly.json`. This file says where every part sits in 3D space — position, rotation, and scale in metres.
 
-| Topic | Page | What it covers |
-|-------|------|---------------|
-| **Agentic loop** | [Agentic Loop](/architecture/agentic-loop) | Pipeline flow, human gates, loop exit rules |
-| **End-to-end example** | [Sample Run](/sample-runs/dishwasher-example) | Inputs, outputs, and logic per agent and tool |
-| **Agents** | [Agents](/architecture/agents) | Orchestrator agent + subagents, permissions, prompts |
-| **Intermediate Representation** | [IR](/architecture/intermediate-representation) | Parts IR, Layout IR, Critique IR, data flow |
-| **Schemas** | [Schemas](/architecture/schemas) | JSON Schema validation for every artifact |
-| **Tool Scripts** | [Tools](/architecture/tools) | Deterministic Python and Blender scripts |
+No LLM is involved here. It is pure geometry math.
 
-## Repository layout
+### 5. Render, score, and refine
 
-```
-dexter/
-├── .opencode/agents/     # Agent prompts (orchestrator agent + subagents)
-├── configs/base.yaml           # Pipeline knobs (see configs/)
-├── opencode.json         # Agent definitions and permissions
-├── schemas/              # JSON Schema files
-├── tool_scripts/         # Deterministic pipeline scripts
-├── input_images/         # Source product photos
-├── AGENTS.md             # Agent-facing source of truth
-└── docs/                 # This documentation site
-```
+Now the **placement ↔ critic loop** begins. Each round lives in `iterations/NNN/`:
 
-Pipeline output: `.intermediate/<asset>/<NNN>/` (gitignored).
+1. **Assemble** — Blender loads the GLBs and builds a scene (`assembled.blend`)
+2. **Render** — four views are captured: front, top, left, isometric
+3. **Critique** — the critic subagent compares the renders to your source photo and scores the layout
+4. **Update** — if the loop continues, corrections are applied to the next `assembly.json`
 
-## Downstream consumers
+The critic might say a door angle is too shallow, a rack is shifted left, or a part is the wrong size. Locked parts are left alone. The orchestrator keeps the **best-scoring** iteration even if a later round regresses.
 
-Dexter produces USD packages consumed by:
+![Isometric render from a placement iteration](/assets/images/dexter/run/iter_006_isometric.png)
 
-- **NVIDIA Isaac Sim** — primary target; PhysX articulation from USD prims
+*Each iteration produces renders the critic compares against the original photo.*
 
-Dexter does **not** run inside any simulator — it is the step before those tools get useful content.
+| Loop stops when… | Meaning |
+|------------------|---------|
+| Score reaches the threshold | Layout is good enough (default: 85+) |
+| Max iterations reached | Hard cap (default: 5 rounds) |
+| Score stops improving | No progress for several rounds in a row |
+
+### 6. You approve the layout
+
+When the loop ends, the orchestrator pauses at the second **human gate**. You review renders from the best iteration, the critic score, and the assembled Blender file. Approve it, pick a different iteration, or ask for more refinement through another critic round.
+
+### 7. Export for simulation
+
+After you approve, `blender_export_usd.py` writes the final package: `robot.usda`, extracted `textures/`, and a `robot_prim_map.json` that maps Blender object names to USD prim paths. This is what you load in Isaac Sim or similar tools.
+
+![Dexter asset in Isaac Sim](/assets/images/dexter/isaac_sim_demo.gif)
+
+*The end goal: an articulated asset you can actuate in simulation.*
+
+---
+
+## What an articulated asset means
+
+A dishwasher is not one solid block. It is a **chassis** plus a **door** on a hinge plus **racks** that slide. Each piece is a separate rigid mesh connected by joints. In simulation you change joint angles — open the door, pull out a rack — instead of deforming a single frozen shape.
+
+![Articulated asset example](/assets/images/dexter/articulated_asset_example.gif)
+
+*Articulation means independent rigid parts connected by joints — not one fused mesh.*
+
+| Deliverable | What it is |
+|-------------|------------|
+| `component_glbs/<part>.glb` | One 3D mesh per moving part |
+| `parts.json` | Kinematic tree — which parts exist and how they connect |
+| `assembly.json` | Layout — where each part sits in 3D space |
+| `critic.json` | Score and per-part corrections from each critique round |
+| `robot.usda` + `textures/` | Final USD package for simulators |
+
+---
+
+## Where everything lives on disk
+
+Each run writes to `.intermediate/<asset>/<NNN>/`. The orchestrator checks this folder before every step and skips work whose outputs already exist — so you can resume after a pause or interruption.
+
+![Intermediate directory layout](/assets/images/dexter/intermediate-directory.png)
+
+*One run folder holds source image, parts, meshes, iterations, and the final USD.*
+
+---
+
+## Summary
+
+| Stage | Who | Output |
+|-------|-----|--------|
+| Part identification | analyze subagent | `parts.json` |
+| Human review | You | — |
+| 3D component generation | `generate_components.py` | PNGs, GLBs, dims |
+| Initial placement | `initialize_placement.py` | `iterations/001/assembly.json` |
+| Refinement loop | Blender scripts + critic subagent | renders, `critic.json`, updated assemblies |
+| Human review | You | — |
+| USD export | `blender_export_usd.py` | `robot.usda` |
+
+Dexter does not run inside a simulator. It is the step **before** simulation — turning a photo into something a simulator can load and actuate.
+
+---
+
+**Next:** [Agentic Loop](/architecture/agentic-loop) — agents, intermediate representations, tool scripts, and schemas in full detail.
+
+**Example run:** [Sample Run: Dishwasher](/sample-runs/dishwasher-example) · **Get started:** [Installation & Run](/getting-started/installation)
