@@ -28,3 +28,30 @@ npm start
 ```
 
 Media assets are in `public/assets/` (images and videos from the Dexter blog and example runs).
+
+## Deploy on Vercel
+
+The docs site is a Next.js app in this directory. Vercel builds it when changes under `docs/` land on `main`.
+
+### One-time setup
+
+1. Sign in at [vercel.com](https://vercel.com) and **Add New → Project**.
+2. Import the `dexter` GitHub repository.
+3. Set **Root Directory** to `docs` (click Edit next to the root path).
+4. Leave **Framework Preset** as **Next.js** (auto-detected).
+5. Build settings (defaults are fine):
+   - **Install Command:** `npm install`
+   - **Build Command:** `npm run build`
+   - **Output Directory:** leave empty (Vercel handles Next.js output)
+6. Set **Production Branch** to `main`.
+7. Deploy.
+
+`vercel.json` in this folder skips builds when a push does not touch `docs/`.
+
+### After setup
+
+Every merge or push to `main` that changes files under `docs/` triggers a production deploy. Preview deploys are created for other branches if enabled in the Vercel project settings.
+
+### Custom domain (optional)
+
+In the Vercel project: **Settings → Domains** → add your domain and follow the DNS instructions.
