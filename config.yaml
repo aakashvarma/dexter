@@ -1,0 +1,34 @@
+# Articulated asset pipeline configuration.
+# Read by orchestrator/run_pipeline.py. Paths are relative to the repo root.
+# Models are not configured here: OpenCode subagents use your logged-in
+# OpenCode model (Codex OAuth).
+
+paths:
+  input_dir: input_images          # where input images live
+  intermediate_root: .intermediate  # per-asset / per-run output tree
+  schemas_dir: schemas             # JSON Schema files used by the validator
+  tool_scripts_dir: tool_scripts   # deterministic step scripts
+  blender_binary: blender          # blender executable on PATH
+
+loop:
+  min_loops: 1                     # always run at least this many iterations
+  max_loops: 5                     # hard cap on iterations
+  score_threshold: 85              # stop once critic score reaches this
+  max_validation_retries: 2        # re-invoke a subagent this many times on schema failure
+
+image_generation:
+  background_instruction: "Isolate only this part, centered on a plain white background, with no other parts visible."
+
+fal:                               # templated into fal_image_to_3d.json
+  endpoint: fal-ai/hunyuan-3d/v3.1/pro/image-to-3d
+  generate_type: Normal
+  enable_pbr: true
+  face_count: 1500000
+  download_timeout_seconds: 300
+  image_extensions: [".png", ".jpg", ".jpeg", ".webp"]
+
+render:                            # render defaults (critic plans the cameras)
+  resolution: [1920, 1080]
+  samples: 64
+  engine: CYCLES
+  file_format: PNG

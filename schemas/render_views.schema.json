@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "render_views",
+  "description": "Camera and render settings consumed by blender_render_views.py.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["resolution", "samples", "engine", "file_format", "cameras"],
+  "properties": {
+    "resolution": {
+      "type": "array",
+      "items": {"type": "integer"},
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "Render size [width, height] in pixels."
+    },
+    "samples": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Cycles sample count."
+    },
+    "engine": {
+      "type": "string",
+      "description": "Blender render engine name."
+    },
+    "file_format": {
+      "type": "string",
+      "description": "Output image format."
+    },
+    "cameras": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "location", "look_at", "output", "light_energy", "light_type"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "View name."
+          },
+          "location": {
+            "type": "array",
+            "items": {"type": "number"},
+            "minItems": 3,
+            "maxItems": 3,
+            "description": "Camera world position [x, y, z]."
+          },
+          "look_at": {
+            "type": "array",
+            "items": {"type": "number"},
+            "minItems": 3,
+            "maxItems": 3,
+            "description": "World point the camera faces."
+          },
+          "output": {
+            "type": "string",
+            "description": "Filename under the render output dir."
+          },
+          "light_energy": {
+            "type": "number",
+            "description": "Sun strength for this shot."
+          },
+          "light_type": {
+            "type": "string",
+            "description": "Blender light type co-located with the camera."
+          }
+        }
+      }
+    }
+  }
+}

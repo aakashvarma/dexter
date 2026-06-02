@@ -216,3 +216,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Pipeline iterations (per-asset, per-correction run output)
+.intermediate/
