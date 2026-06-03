@@ -16,8 +16,16 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["path", "location", "rotation", "scale"],
+        "required": ["name", "path", "location", "rotation", "scale"],
         "properties": {
+          "name": {
+            "type": "string",
+            "description": "Part name (GLB stem); matches parts.json."
+          },
+          "parent": {
+            "type": "string",
+            "description": "Name of the parent asset; transform is inherited from it. Omit or null for the root."
+          },
           "path": {
             "type": "string",
             "description": "GLB path relative to root or absolute."

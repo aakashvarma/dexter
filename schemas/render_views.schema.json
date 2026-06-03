@@ -32,25 +32,23 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["name", "location", "look_at", "output", "light_energy", "light_type"],
+        "required": ["name", "direction", "output", "light_energy", "light_type"],
         "properties": {
           "name": {
             "type": "string",
             "description": "View name."
           },
-          "location": {
+          "direction": {
             "type": "array",
             "items": {"type": "number"},
             "minItems": 3,
             "maxItems": 3,
-            "description": "Camera world position [x, y, z]."
+            "description": "View direction from the assembly center; the script places and aims the camera to frame the whole assembly."
           },
-          "look_at": {
-            "type": "array",
-            "items": {"type": "number"},
-            "minItems": 3,
-            "maxItems": 3,
-            "description": "World point the camera faces."
+          "margin": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Padding factor (>1 zooms out). Defaults to 1.3 if omitted."
           },
           "output": {
             "type": "string",

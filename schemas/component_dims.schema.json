@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "component_dims",
+  "description": "Per-GLB world bounding boxes emitted by blender_measure_glbs.py.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["parts"],
+  "properties": {
+    "parts": {
+      "type": "object",
+      "description": "Map of part name (GLB stem) to its bounding box.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["size", "center", "min", "max"],
+        "properties": {
+          "size": {
+            "type": "array",
+            "items": {"type": "number"},
+            "minItems": 3,
+            "maxItems": 3,
+            "description": "World bounding box extent [dx, dy, dz]."
+          },
+          "center": {
+            "type": "array",
+            "items": {"type": "number"},
+            "minItems": 3,
+            "maxItems": 3,
+            "description": "World bounding box center [x, y, z]."
+          },
+          "min": {
+            "type": "array",
+            "items": {"type": "number"},
+            "minItems": 3,
+            "maxItems": 3,
+            "description": "World bounding box minimum corner [x, y, z]."
+          },
+          "max": {
+            "type": "array",
+            "items": {"type": "number"},
+            "minItems": 3,
+            "maxItems": 3,
+            "description": "World bounding box maximum corner [x, y, z]."
+          }
+        }
+      }
+    }
+  }
+}

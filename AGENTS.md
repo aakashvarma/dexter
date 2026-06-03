@@ -1,41 +1,41 @@
 # AGENTS.md
 
-## Repository Shape
+## Source Of Truth
 
-- Main entrypoint is the `orchestrator` OpenCode agent (`.opencode/agents/orchestrator.md`); it owns all control flow and invokes the analyze/imagegen/placement/critic subagents plus deterministic scripts. There is no Python driver.
-- Prefer `opencode.json` and `.opencode/agents/*.md` over `README.md` for pipeline behavior; the README still references a non-existent `orchestrator/run_pipeline.py` and critic-planned render views.
+- The real entrypoint is the `orchestrator` OpenCode agent in `.opencode/agents/orchestrator.md`; there is no `orchestrator/run_pipeline.py` driver despite the README.
+- Trust `opencode.json`, `.opencode/agents/*.md`, `config.yaml`, `tool_scripts/`, and `schemas/` over README prose when they disagree.
 - Deterministic scripts live in `tool_scripts/`; JSON contracts live in `schemas/`; agent prompts and permissions live in `.opencode/agents/` and `opencode.json`.
-- Pipeline output is generated under `.intermediate/<asset>/<run>/` and is gitignored; do not treat it as source.
-- Ignore `.opencode/node_modules/` during searches; `.opencode/.gitignore` marks the local OpenCode npm files as ignored.
+- Generated runs live under `.intermediate/<asset>/<run>/` and are gitignored; inspect them to resume work, but do not treat them as source.
 
-## Setup And Run
+## Running The Pipeline
 
-- Install Python deps with `pip install -r requirements.txt`.
-- Full pipeline requires `opencode` authenticated, `FAL_KEY` exported for fal.ai, and `blender` on `PATH` unless `config.yaml` changes `paths.blender_binary`.
-- Run it by chatting with the orchestrator: `opencode` then switch to the `orchestrator` agent (or `opencode run --agent orchestrator -- "build the dishwasher from input_images/dishwasher.png"`).
-- The orchestrator probes `.intermediate/<asset>/<run>/` to see what already exists and skips any step whose valid output is present, so re-running continues from where it left off.
-- It pauses after `parts.json` for manual review, then proceeds on your confirmation.
+- Setup is `pip install -r requirements.txt`; full runs also need authenticated `opencode`, `FAL_KEY` for fal.ai, and `blender` on `PATH` unless `config.yaml` changes `paths.blender_binary`.
+- Run through the orchestrator agent, e.g. `opencode run --agent orchestrator -- "build the dishwasher from input_images/dishwasher.png"`; do not use the stale README `python orchestrator/run_pipeline.py` command.
+- The orchestrator must probe `.intermediate/<asset>/<run>/` first and skip any valid existing artifact, so reruns continue from disk state.
+- The orchestrator pauses after `parts.json` for human review and must not proceed until the user confirms or edits it.
 
 ## Pipeline Semantics
 
-- One-time stages: analyze -> `parts.json`, `build_component_prompts.py` -> `prompts.json`, imagegen -> `component_images/`, `fal_image_to_3d.py` -> `component_glbs/`.
-- Iterated stages: placement -> `place_assets.json`, Blender assembly -> `assembled.blend`, orchestrator writes the standard `render_views.json`, Blender renders -> `renders/`, critic score -> `critic.json`.
-- Only placement/render/critique loop; component images and GLBs are not regenerated in later iterations unless their outputs are missing.
-- Loop limits and defaults are in `config.yaml`: `min_loops`, `max_loops`, `score_threshold`, `max_validation_retries`, fal settings, and render defaults.
-- `tool_scripts/openai_imagegen.py` exists but the configured pipeline uses the `imagegen` subagent for component images; use the script only if the user explicitly asks for the OpenAI Images path and has `OPENAI_API_KEY` set.
+- One-time stages are analyze -> `parts.json`, `build_component_prompts.py` -> `prompts.json`, imagegen -> `component_images/`, `fal_image_to_3d.py` -> `component_glbs/`, `blender_measure_glbs.py` -> `component_dims.json`.
+- Iterated stages are placement -> `place_assets.json`, `blender_place_assets.py` -> `assembled.blend`, orchestrator-written `render_views.json`, `blender_render_views.py` -> `renders/`, critic -> `critic.json`.
+- Only placement/render/critique loops; component prompts, images, GLBs, and dimensions are regenerated only when their outputs are missing or explicitly redone.
+- Loop knobs are in `config.yaml`: `min_loops`, `max_loops`, `score_threshold`, `max_validation_retries`, and `no_improvement_patience`.
+- The orchestrator tracks the best score, bases the next placement on the best layout after regressions, and stops when the threshold/min-loop rule, max loop, or no-improvement patience is hit.
+- `tool_scripts/openai_imagegen.py` is not the configured component-image path; use it only for an explicit OpenAI Images request with `OPENAI_API_KEY` set.
 
 ## Verification
 
-- There is no repo test runner, linter, typecheck, CI, or pre-commit config currently checked in.
-- Validate generated JSON directly: `python tool_scripts/validate_json.py --schema schemas/<name>.schema.json --data <path>`.
-- The orchestrator validates `parts.json`, `place_assets.json`, `render_views.json`, and `critic.json` and retries the responsible subagent on schema failure (up to `max_validation_retries`).
-- Blender scripts must be run through Blender, e.g. `blender --background --python tool_scripts/blender_place_assets.py -- --layout <place_assets.json> --output <assembled.blend>`.
+- There is no checked-in test runner, linter, typecheck, CI workflow, or pre-commit config.
+- Validate generated JSON with `python tool_scripts/validate_json.py --schema schemas/<name>.schema.json --data <path>`.
+- The orchestrator validates `parts.json`, `place_assets.json`, `render_views.json`, and `critic.json`; `component_dims.json` has a schema but is produced by Blender measurement.
+- Blender scripts must run through Blender with arguments after `--`, e.g. `blender --background --python tool_scripts/blender_place_assets.py -- --layout <place_assets.json> --output <assembled.blend>`.
 
-## Agent And Schema Gotchas
+## Schema And Agent Gotchas
 
-- Subagents write exactly the one artifact the orchestrator requests; the orchestrator, not the subagents, decides ordering, retries, and stop conditions.
-- `place_assets.root` must be the run directory; relative asset paths should resolve under it, usually `component_glbs/<part>.glb`.
-- `place_assets.rotation` is degrees in XYZ Euler order; the Blender script converts degrees to radians.
-- `render_views.json` is written by the orchestrator (not the critic) and each camera must include `name`, `location`, `look_at`, `output`, `light_energy`, and `light_type`; use front, top, left, and isometric views.
-- Iteration 1 placement is location-only (`rotation` `[0,0,0]`, `scale` `[1,1,1]`); iteration 2+ applies critic corrections including `suggested_rotation_delta` and `suggested_scale_factor`.
-- Critique feedback is consumed by the next placement pass, so keep `issues[]` actionable with component names and, when possible, `suggested_delta`, `suggested_rotation_delta`, or `suggested_scale_factor`.
+- Subagents each write exactly one requested artifact; only the orchestrator decides ordering, retries, render views, and stop conditions.
+- `place_assets.root` should be the run directory; relative asset paths usually resolve as `component_glbs/<part>.glb` under that root.
+- Asset transforms are on parent pivots: child `location`/`rotation`/`scale` are relative to the parent, and scaling or moving a parent moves all children.
+- `place_assets.rotation` is degrees in XYZ Euler order; `blender_place_assets.py` converts to radians.
+- Placement iteration 1 intentionally uses root-at-origin, measured extents from `component_dims.json`, and `rotation`/`scale` of `[0,0,0]` and `[1,1,1]`; iteration 2+ applies only critic deltas and leaves `locked` components unchanged.
+- `render_views.json` is written by the orchestrator, not the critic; cameras use `direction` vectors plus `output`, `light_energy`, `light_type`, and optional `margin`, and `blender_render_views.py` auto-frames on a white background.
+- Critic `issues[]` are the placement feedback channel; keep them per-component and actionable with measured `suggested_delta`, `suggested_rotation_delta`, `suggested_scale_factor`, or `locked`.

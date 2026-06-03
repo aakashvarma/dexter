@@ -21,13 +21,18 @@ JSON schema (every key required)::
       "root": "/path/to/project",       # base dir for relative GLB paths
       "assets": [
         {
+          "name": "body",               # part name (GLB stem)
+          "parent": null,               # parent part name; null for the root
           "path": "glbs/body.glb",      # GLB path (relative to root or absolute)
-          "location": [0.0, 0.0, 0.0],  # pivot world position [x, y, z]
-          "rotation": [0.0, 0.0, 0.0],  # pivot rotation in degrees, XYZ Euler
-          "scale": [1.0, 1.0, 1.0]      # pivot scale [x, y, z]
+          "location": [0.0, 0.0, 0.0],  # position [x, y, z] (relative to parent)
+          "rotation": [0.0, 0.0, 0.0],  # rotation in degrees, XYZ Euler
+          "scale": [1.0, 1.0, 1.0]      # scale [x, y, z]
         }
       ]
     }
+
+Children inherit their parent's transform, so scaling the body also moves and
+scales its racks and door.
 """
 
 from __future__ import annotations
@@ -93,12 +98,18 @@ def import_glb(path: Path) -> list:
     return imported
 
 
-def place_asset(entry: dict, root: Path) -> None:
-    """Import one GLB and apply transform from a layout entry.
+def place_asset(entry: dict, root: Path):
+    """Import one GLB, apply its transform, and return the pivot empty.
+
+    The transform is stored on the pivot's local basis so that, once parented,
+    ``location``/``rotation``/``scale`` are interpreted relative to the parent.
 
     Args:
         entry: One object from the ``assets`` list in the layout JSON.
         root: Base directory for resolving relative ``path`` values.
+
+    Returns:
+        The pivot empty the GLB meshes are parented under.
     """
     path = Path(entry["path"])
     if not path.is_absolute():
@@ -107,16 +118,16 @@ def place_asset(entry: dict, root: Path) -> None:
         raise FileNotFoundError(path)
 
     imported = import_glb(path)
-    pivot = bpy.data.objects.new(path.stem, None)
+    pivot = bpy.data.objects.new(entry["name"], None)
     bpy.context.collection.objects.link(pivot)
 
     for obj in imported:
         obj.parent = pivot
-        obj.matrix_parent_inverse = pivot.matrix_world.inverted()
 
     pivot.location = Vector(entry["location"])
     pivot.rotation_euler = Vector(math.radians(v) for v in entry["rotation"])
     pivot.scale = Vector(entry["scale"])
+    return pivot
 
 
 def main() -> None:
@@ -127,8 +138,16 @@ def main() -> None:
     output = Path(args.output).expanduser().resolve()
 
     clear_scene()
+    pivots = {entry["name"]: place_asset(entry, root) for entry in layout["assets"]}
+
+    # Wire up parenting so children inherit their parent's transform. Keep the
+    # local basis intact (identity parent-inverse) so transforms stay relative.
     for entry in layout["assets"]:
-        place_asset(entry, root)
+        parent = entry.get("parent")
+        if parent:
+            child = pivots[entry["name"]]
+            child.parent = pivots[parent]
+            child.matrix_parent_inverse.identity()
 
     output.parent.mkdir(parents=True, exist_ok=True)
     bpy.ops.wm.save_as_mainfile(filepath=str(output))
