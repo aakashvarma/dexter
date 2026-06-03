@@ -61,6 +61,13 @@
             "type": "number",
             "exclusiveMinimum": 0,
             "description": "Suggested multiplicative scale change."
+          },
+          "suggested_rotation_delta": {
+            "type": "array",
+            "items": {"type": "number"},
+            "minItems": 3,
+            "maxItems": 3,
+            "description": "Suggested rotation change in degrees [dx, dy, dz], added to rotation."
           }
         }
       }
