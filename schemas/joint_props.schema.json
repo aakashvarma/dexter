@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "joint_props",
+  "description": "Per-joint URDF metadata (axis and limits) for each non-root part. Consumed by build_urdf.py.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["joints"],
+  "properties": {
+    "joints": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["child", "joint_name", "type", "axis", "limit"],
+        "properties": {
+          "child": {
+            "type": "string",
+            "description": "Name of the child part this joint drives; matches parts.json."
+          },
+          "joint_name": {
+            "type": "string",
+            "description": "URDF joint name, e.g. <child>_joint."
+          },
+          "type": {
+            "type": "string",
+            "enum": ["fixed", "revolute", "prismatic", "continuous", "floating", "planar"],
+            "description": "URDF joint type; must match the part's joint_type in parts.json."
+          },
+          "axis": {
+            "type": "array",
+            "items": {"type": "number"},
+            "minItems": 3,
+            "maxItems": 3,
+            "description": "Unit axis of motion [x, y, z] in the child frame."
+          },
+          "limit": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["lower", "upper", "effort", "velocity"],
+            "description": "Motion limits. Radians for revolute, meters for prismatic. Ignored for fixed/continuous/floating.",
+            "properties": {
+              "lower": {
+                "type": "number",
+                "description": "Lower limit (radians or meters)."
+              },
+              "upper": {
+                "type": "number",
+                "description": "Upper limit (radians or meters)."
+              },
+              "effort": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Maximum joint effort."
+              },
+              "velocity": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Maximum joint velocity."
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

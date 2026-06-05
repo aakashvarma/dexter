@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "assembly",
+  "description": "Articulated-asset intermediate representation. Consumed by blender_assemble.py (visual render) and build_urdf.py (URDF export).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["root", "robot_name", "links"],
+  "properties": {
+    "root": {
+      "type": "string",
+      "description": "Base directory for resolving relative mesh paths (the run directory)."
+    },
+    "robot_name": {
+      "type": "string",
+      "description": "Name of the assembled object; used as the URDF <robot name>."
+    },
+    "links": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "parent", "visual_mesh", "collision_mesh", "origin", "scale"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Part name (mesh stem); matches parts.json."
+          },
+          "parent": {
+            "type": ["string", "null"],
+            "description": "Name of the parent link; null for the root. Transform is relative to the parent."
+          },
+          "visual_mesh": {
+            "type": "string",
+            "description": "GLB path (relative to root or absolute) used for high-quality Blender renders."
+          },
+          "collision_mesh": {
+            "type": "string",
+            "description": "Simplified OBJ path (relative to root or absolute) used for URDF visual/collision geometry."
+          },
+          "origin": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["xyz", "rpy_deg"],
+            "description": "Pose of this link's pivot relative to its parent.",
+            "properties": {
+              "xyz": {
+                "type": "array",
+                "items": {"type": "number"},
+                "minItems": 3,
+                "maxItems": 3,
+                "description": "Pivot position [x, y, z], relative to the parent."
+              },
+              "rpy_deg": {
+                "type": "array",
+                "items": {"type": "number"},
+                "minItems": 3,
+                "maxItems": 3,
+                "description": "Pivot rotation in degrees, XYZ Euler (roll, pitch, yaw)."
+              }
+            }
+          },
+          "scale": {
+            "type": "array",
+            "items": {"type": "number"},
+            "minItems": 3,
+            "maxItems": 3,
+            "description": "Pivot scale [x, y, z]. Applied in the Blender assembly; URDF mesh geometry is unscaled."
+          }
+        }
+      }
+    }
+  }
+}
