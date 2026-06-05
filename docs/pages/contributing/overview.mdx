@@ -31,6 +31,7 @@ The natural next step for production: replace prompt orchestration with an expli
 | Repo layout and key files | [Project Structure](/contributing/project-structure) |
 | Adding agents, steps, gates | [Extending the Pipeline](/contributing/extending-pipeline) |
 | JSON Schema conventions | [Schemas & Validation](/contributing/schemas-and-validation) |
+| Tool script conventions | [Tool Script Standards](/contributing/tool-script-standards) |
 | Local dev workflow | [Local Development](/contributing/local-development) |
 
 ## Prerequisites for contributors
@@ -47,4 +48,4 @@ The natural next step for production: replace prompt orchestration with an expli
 4. Run a test pipeline on a bundled input image
 5. Update documentation if behavior changes
 
-There is no checked-in test runner or CI. Focused verification is JSON Schema validation (`python3 tool_scripts/common.py --schema … --data …`), Ruff lint/format on `tool_scripts/` (see [README#tool-script-standards](https://github.com/aakashvarma/dexter/blob/main/README.md#tool-script-standards)), and manual pipeline runs.
+There is no checked-in test runner or CI. Focused verification is JSON Schema validation (`python3 tool_scripts/common.py --schema … --data …`), Ruff lint/format on `tool_scripts/` (see [Tool Script Standards](/contributing/tool-script-standards)), and manual pipeline runs.

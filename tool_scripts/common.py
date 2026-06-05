@@ -89,7 +89,7 @@ def validate_json_file(schema_path: Path | str, data_path: Path | str) -> list[s
 
 
 def exit_if_invalid_json(schema_path: Path | str, data_path: Path | str) -> None:
-    """Print validation result per README tool-script conventions and exit 1 when invalid."""
+    """Print validation result per tool-script conventions and exit 1 when invalid."""
     data_path = Path(data_path)
     errors = validate_json_file(schema_path, data_path)
     if errors:

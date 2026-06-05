@@ -1,0 +1,83 @@
+# Tool Script Standards
+
+Dexter tool scripts follow [PEP 8](https://peps.python.org/pep-0008/) and are linted with [Ruff](https://docs.astral.sh/ruff/).
+
+## Layout
+
+```
+tool_scripts/
+  common.py              # shared I/O, config, validation helpers (+ JSON schema CLI)
+  <name>.py                # one entrypoint per pipeline step
+  blender_<name>.py        # scripts run inside Blender (import bpy)
+```
+
+- Put reusable logic in `common.py`; keep entrypoint scripts thin.
+- Blender scripts must not import non-Blender dependencies beyond `common.py`.
+
+## Naming
+
+| Kind | Style | Example |
+|------|-------|---------|
+| Modules | `snake_case` | `initialize_placement.py` |
+| Functions | `snake_case`, verb-first | `load_json_file`, `compute_node_scale` |
+| Variables | `snake_case`, descriptive | `parent_world_size`, not `pW` |
+| Constants | `UPPER_SNAKE_CASE` | `REPO_ROOT`, `DEFAULT_CONFIG_PATH` |
+| Private helpers | leading `_` | `_flatten_placements_to_parts` |
+| CLI flags | `--kebab-case` | `--run-dir`, `--prev-assembly` |
+
+Avoid abbreviations (`jt`, `hs`, `pi`, `ax_idx`) and Hungarian prefixes. Use full words unless the domain term is standard (`glb`, `usd`, `json`).
+
+## Types and imports
+
+- Start every module with `from __future__ import annotations`.
+- Add return types on public functions; use `dict[str, Any]` for JSON blobs.
+- Order imports: stdlib → third-party → local (`common`).
+- Type-check Blender imports with `# type: ignore[import-not-found]`.
+
+## CLI entrypoints
+
+Every script exposes:
+
+```python
+def main() -> None:
+    ...
+
+if __name__ == "__main__":
+    main()
+```
+
+- Use `argparse`; document usage in the module docstring.
+- Resolve paths with `Path(...).expanduser().resolve()`.
+- Missing inputs: `exit_if_missing()` for CLI tools, or raise `FileNotFoundError` in library code.
+- Blender scripts parse argv after `--` via `parse_blender_args()`.
+
+## JSON and config
+
+- Read: `load_json_file(path)`
+- Write: `write_json_file(path, data)` (indent 2, trailing newline, UTF-8)
+- Config: `load_yaml_config()` from `configs/base.yaml`
+- Component dims: `load_dims_map(data)` or `load_dims_file(run_dir)`
+- Validation: `validate_json_file()`, `exit_if_invalid_json()`; CLI: `python3 tool_scripts/common.py --schema … --data …` (fixtures in `test_fixtures/`)
+
+## User-facing output
+
+Keep stdout minimal and consistent:
+
+| Event | Message |
+|-------|---------|
+| Artifact written | `Wrote {path}` |
+| Skipped existing file | `skip (exists): {path}` |
+| Validation pass | `OK: {path}` |
+| Validation fail | `INVALID: {path}` + indented errors |
+| Recoverable warning | `Warning: …` on stderr |
+
+No progress or debug logging unless explicitly requested.
+
+## Formatting and lint
+
+```bash
+ruff check tool_scripts/
+ruff format tool_scripts/
+```
+
+Configuration lives in `pyproject.toml` at the repo root. Run both commands before committing script changes.
