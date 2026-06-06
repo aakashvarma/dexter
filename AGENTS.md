@@ -11,27 +11,26 @@
 - Setup: `pip install -r requirements.txt`; full runs also need authenticated `opencode`, `FAL_KEY` for fal.ai, and `blender` on `PATH` (or change `paths.blender_binary` in `config.yaml`).
 - Start through OpenCode, e.g. `opencode run --agent orchestrator -- "build the dishwasher from input_images/dishwasher.png"`.
 - Orchestrator behavior is resume-first: skip valid existing artifacts unless the user explicitly asks to redo them.
-- Human gates are mandatory: pause after `parts.json`; after URDF export, ask the user to preview with `python tool_scripts/view_urdf.py --urdf <run_dir>/model.urdf` and confirm or provide joint feedback.
+- Human gate is mandatory: pause after `parts.json` and wait for confirmation before continuing.
 
 ## Pipeline Order
 
 - One-time placement inputs: `analyze` -> `parts.json` -> human parts gate -> `build_component_prompts.py` -> `prompts.json` -> `imagegen` -> `component_images/` -> `fal_image_to_3d.py` -> `component_glbs/` -> Blender export/simplify -> `component_meshes/` and `component_meshes_simp/` -> Blender measure -> `component_dims.json`.
 - Placement loop per `iterations/<NNN>/`: `placement` -> `assembly.json` -> `blender_assemble.py` -> `assembled.blend` -> orchestrator-written `render_views.json` -> `blender_render_views.py` -> `renders/` -> `critic` -> `critic.json`.
-- Do not run `joint_props` or `build_urdf.py` until the placement/critic loop ends and the best iteration is known; final `joint_props.json` and `model.urdf` live at the run root.
-- Loop controls (`min_loops`, `max_loops`, `score_threshold`, `max_validation_retries`, `no_improvement_patience`), fal settings, render defaults, and URDF simplify target are in `config.yaml`.
+- Pipeline ends when the placement/critic loop converges; the final deliverable is `iterations/<B>/assembled.blend` for the best iteration `B`.
+- Loop controls (`min_loops`, `max_loops`, `score_threshold`, `max_validation_retries`, `no_improvement_patience`), fal settings, and render defaults are in `config.yaml`.
 
 ## Verification And Commands
 
 - There is no checked-in test runner, linter, typecheck, CI workflow, or pre-commit config.
-- Validate generated JSON with `python tool_scripts/validate_json.py --schema schemas/<name>.schema.json --data <path>` for `parts`, `assembly`, `critic`, `joint_props`, and orchestrator-written `render_views`.
+- Validate generated JSON with `python tool_scripts/validate_json.py --schema schemas/<name>.schema.json --data <path>` for `parts`, `assembly`, and `critic`.
 - Blender scripts require Blender plus arguments after `--`, e.g. `blender --background --python tool_scripts/blender_assemble.py -- --layout <assembly.json> --output <assembled.blend>`.
-- `build_urdf.py` is pure Python: `python tool_scripts/build_urdf.py --assembly <best assembly.json> --joint-props <run_dir>/joint_props.json --output <run_dir>/model.urdf`.
 
 ## Schema And Agent Gotchas
 
-- Subagents write exactly one requested artifact; only the orchestrator owns ordering, retries, render views, stop conditions, and human gates.
+- Subagents write exactly one requested artifact; only the orchestrator owns ordering, retries, render views, and stop conditions.
 - `assembly.json` is the shared IR: `visual_mesh` should resolve to `component_glbs/<part>.glb`; `collision_mesh` to `component_meshes_simp/<part>.obj`; `root` should be the run directory.
-- Link transforms are parent-relative pivots; `origin.rpy_deg` is XYZ Euler degrees. `scale` affects Blender assembly only; URDF mesh geometry is unscaled.
+- Link transforms are parent-relative pivots; `origin.rpy_deg` is XYZ Euler degrees. `scale` affects Blender assembly only.
 - Placement iteration 1 sets root at origin, rotations `[0,0,0]`, collision-free spacing from `component_dims.json`, and plausible scales; iteration 2+ applies critic deltas. Critic `locked` only when position, size, and collisions are all acceptable.
 - Render views are four auto-framed cameras (`front`, `top`, `left`, `isometric`) using `direction`, `output`, `light_energy`, and `light_type`; do not add `location`/`look_at`.
 - Critic feedback should be per-component and actionable via `suggested_delta`, `suggested_rotation_delta`, `suggested_scale_factor`, or `locked`; the next placement may be based on the best prior layout after a regression.
