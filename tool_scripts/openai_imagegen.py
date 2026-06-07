@@ -2,9 +2,14 @@
 
 What it does
 ------------
-Reads ``prompts.json`` and calls the OpenAI ``images/generate`` endpoint for
-each entry that does not already have an output file, then writes the result
-as a PNG to ``output_dir/<output_filename>``.
+Reads ``prompts.json`` and calls the OpenAI ``images/edit`` endpoint for each
+entry that does not already have an output file, then writes the result as a PNG
+to ``output_dir/<output_filename>``.
+
+``reference_image_path`` must point to ``source.png``. The source image is
+always attached as a visual reference via ``images.edit()`` so the model can see
+the full object while isolating each part. ``images.generate()`` does not accept
+a reference image — ``images.edit()`` is the correct endpoint for this.
 
 The API key is **not** in the config file.  Export ``OPENAI_API_KEY`` in your
 shell before running.
@@ -14,14 +19,15 @@ Run::
     export OPENAI_API_KEY=your_key_here
     python openai_imagegen.py --config ../.intermediate/dishwasher/001/openai_imagegen.json
 
-JSON config schema (every key required)::
+JSON config schema::
 
     {
-      "prompts_path":  "/path/to/prompts.json",    # output of build_component_prompts.py
-      "output_dir":    "/path/to/component_images", # folder where PNGs are written
-      "model":         "gpt-image-1",               # OpenAI image model
-      "size":          "1024x1024",                 # "1024x1024" | "1536x1024" | "1024x1536"
-      "quality":       "medium"                     # "low" | "medium" | "high"
+      "prompts_path":         "/path/to/prompts.json",    # output of build_component_prompts.py
+      "output_dir":           "/path/to/component_images", # folder where PNGs are written
+      "model":                "gpt-image-2",               # OpenAI image model (gpt-image-2 or dall-e-3)
+      "size":                 "1024x1024",                 # "1024x1024" | "1536x1024" | "1024x1536"
+      "quality":              "medium",                    # "low" | "medium" | "high"
+      "reference_image_path": "/path/to/source.png"       # required; always passed as visual reference
     }
 """
 
@@ -55,6 +61,14 @@ def generate_images(cfg: dict) -> None:
 
     client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
+    ref_image_path = cfg.get("reference_image_path")
+    if not ref_image_path:
+        raise OSError("reference_image_path is required and must point to source.png")
+    ref_path = Path(ref_image_path).expanduser().resolve()
+    if not ref_path.exists():
+        raise FileNotFoundError(f"reference image not found: {ref_path}")
+    print(f"using source image: {ref_path}")
+
     for entry in prompts:
         out_file = output_dir / entry["output_filename"]
         if out_file.exists():
@@ -62,18 +76,20 @@ def generate_images(cfg: dict) -> None:
             continue
 
         print(f"generating: {out_file.name}  …", flush=True)
-        response = client.images.generate(
-            model=cfg["model"],
-            prompt=entry["prompt"],
-            n=1,
-            size=cfg["size"],
-            quality=cfg["quality"],
-            output_format="png",
-        )
+
+        # images.edit() is the correct endpoint for passing a reference image;
+        # images.generate() does not accept an image argument.
+        with ref_path.open("rb") as ref_fh:
+            response = client.images.edit(
+                model=cfg["model"],
+                image=ref_fh,
+                prompt=entry["prompt"],
+                n=1,
+                size=cfg["size"],
+            )
 
         image_data = response.data[0]
 
-        # gpt-image-1 returns b64_json; dall-e-3 returns a URL
         if getattr(image_data, "b64_json", None):
             png_bytes = base64.b64decode(image_data.b64_json)
             out_file.write_bytes(png_bytes)

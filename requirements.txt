@@ -3,3 +3,4 @@ openai
 requests
 jsonschema
 pyyaml
+usd-core
