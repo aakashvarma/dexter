@@ -2,14 +2,14 @@
 
 Step-by-step setup after confirming [Requirements](/getting-started/requirements).
 
-## 1. Clone the repository
+## Clone the repository
 
 ```bash
 git clone https://github.com/aakashvarma/dexter.git
 cd dexter
 ```
 
-## 2. Install OpenCode
+## Install OpenCode
 
 ```bash
 curl -fsSL https://opencode.ai/install | bash
@@ -24,16 +24,18 @@ Verify:
 opencode --version
 ```
 
-## 3. Authenticate OpenCode
+## Authenticate OpenCode
 
 Subagents use your logged-in OpenCode model (Codex OAuth). No model names are hardcoded in the repo.
 
 ```bash
 opencode          # open the TUI
-/connect          # select "opencode", authenticate at opencode.ai/auth
+/connect          # or type /connect in the prompt — authenticate at opencode.ai/auth
 ```
 
-## 4. Initialise OpenCode for this project
+![OpenCode slash commands including /connect and /init](/assets/images/opencode/slash-commands.png)
+
+## Initialise OpenCode for this project
 
 ```bash
 cd /path/to/dexter
@@ -41,9 +43,13 @@ opencode
 /init             # analyses the project and writes AGENTS.md
 ```
 
+Press **Tab** (or type `/agents`) and select **orchestrator** before running the pipeline:
+
+![Select the orchestrator agent in OpenCode](/assets/images/opencode/select-agent.png)
+
 `AGENTS.md` at the repo root is the agent-facing source of truth for pipeline semantics.
 
-## 5. Install Python dependencies
+## Install Python dependencies
 
 ```bash
 pip install -r requirements.txt
@@ -57,7 +63,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## 6. Install Blender
+## Install Blender
 
 **macOS (Homebrew):**
 
@@ -84,7 +90,7 @@ paths:
   blender_binary: /Applications/Blender.app/Contents/MacOS/Blender
 ```
 
-## 7. Set environment variables
+## Set environment variables
 
 Add to your shell profile (`~/.zshrc`, `~/.bashrc`):
 
@@ -95,7 +101,7 @@ export FAL_KEY=...
 
 Reload: `source ~/.zshrc`
 
-## 8. (Optional) Install documentation site
+## (Optional) Install documentation site
 
 ```bash
 cd docs
@@ -123,4 +129,4 @@ opencode --version && echo "OpenCode OK"
 | OpenCode `/connect` fails | Check network; try `npm install -g opencode-ai` |
 | Blender hangs on first run | Normal on macOS — grant permissions in System Settings |
 
-Next: [Configuration](/getting-started/configuration)
+Next: [Configuration](/getting-started/configuration) → [Pipeline Run](/getting-started/pipeline-run)

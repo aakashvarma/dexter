@@ -8,12 +8,10 @@ with all geometry nested under ``--root-prim-path`` (default ``/World/Robot``).
 Blender is natively Z-up, which is also what Isaac Sim expects, so the exporter
 runs with ``convert_orientation=False`` to keep the scene's native Z-up axes
 (setting a Y-up conversion here would tip the whole asset on its side in Isaac
-Sim). Geometry only: physics schemas are added afterwards by
-``apply_physics_spec.py``.
+Sim). Geometry and materials only — no PhysX schemas.
 
 Alongside the USD it writes ``<output_stem>_prim_map.json`` mapping each Blender
-object name to the prim path it received, as a sanity check that the paths the
-physics_spec subagent copied from ``scene.json`` line up with the real stage.
+object name to the prim path it received in the exported stage.
 
 Run::
 
@@ -45,8 +43,7 @@ def parse_args() -> argparse.Namespace:
 def usd_safe(name: str) -> str:
     """Sanitize a Blender object name into a valid USD identifier.
 
-    Kept in sync with ``blender_extract_scene.usd_safe`` so the recorded prim
-    map matches the paths the physics_spec subagent reasoned over.
+    Used when building ``robot_prim_map.json`` for downstream prim-path lookup.
     """
     safe = re.sub(r"[^A-Za-z0-9_]", "_", name)
     if not safe or not (safe[0].isalpha() or safe[0] == "_"):

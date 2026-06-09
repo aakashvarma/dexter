@@ -5,7 +5,7 @@ What it does
 Loads a JSON Schema and a data file, validates the data, and reports the
 result. Prints ``OK`` and exits 0 when valid; prints each schema error and
 exits 1 when invalid. Used as the gate for ``parts.json``,
-``assembly.json``, ``critic.json``, ``physics_spec.json``,
+``assembly.json``, ``critic.json``,
 and ``render_views.json``.
 
 Run::

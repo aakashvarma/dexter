@@ -1,52 +1,61 @@
 # Architecture Overview
 
-Dexter is an **orchestrator-driven agentic pipeline**. One primary OpenCode agent coordinates deterministic tool scripts and five specialized subagents. There is no standalone Python pipeline driver — the orchestrator is the only entrypoint.
+Dexter is an **orchestrator-driven agentic pipeline**. One primary OpenCode agent coordinates deterministic tool scripts and four specialized subagents. There is no standalone Python pipeline driver — the orchestrator is the only entrypoint.
 
 ## System diagram
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     OpenCode Runtime                         │
-│  ┌───────────────────────────────────────────────────────┐  │
-│  │              orchestrator (primary agent)              │  │
-│  │  • reads config.yaml                                   │  │
-│  │  • probes .intermediate/ for existing artifacts        │  │
-│  │  • invokes subagents via Task tool                     │  │
-│  │  • runs tool scripts via bash                          │  │
-│  │  • enforces human gates and loop exit rules            │  │
-│  └──────────┬──────────────┬──────────────┬───────────────┘  │
-│             │              │              │                   │
-│  ┌──────────▼──┐  ┌───────▼──────┐  ┌───▼──────────────┐   │
-│  │  Subagents  │  │ Tool Scripts │  │  JSON Schemas    │   │
-│  │  (5 LLMs)   │  │  (Python +   │  │  (validation     │   │
-│  │             │  │   Blender)   │  │   gates)         │   │
-│  └─────────────┘  └──────────────┘  └──────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
-         │                    │                    │
-         ▼                    ▼                    ▼
-   OpenCode model      OpenAI / fal.ai       .intermediate/
-   (Codex OAuth)       Blender (local)       <asset>/<NNN>/
-```
-
 ![OpenCode agent harness](/assets/images/dexter/opencode_agent_harness.png)
 
-## Design principles
+### User and orchestrator
 
-| Principle | Description |
-|-----------|-------------|
-| **Orchestrator decides everything** | Subagents write one artifact each. No agent-to-agent communication. |
-| **Resume from disk** | Probe `.intermediate/<asset>/<NNN>/` before every step; skip valid existing artifacts. |
-| **Human gates** | Review `parts.json` before 3D generation; review best placement before USD export. |
-| **Schema gates** | Every subagent JSON validated against JSON Schema before proceeding. |
-| **One IR, two outputs** | `assembly.json` drives Blender renders; best `assembled.blend` drives USD export. |
-| **Prompt-orchestrated v0** | Model determines routing and exit conditions — fast to iterate; production would use explicit state machine. |
+You provide a prompt — for example, *"build the dishwasher from `input_images/dishwasher.png`"*. The **orchestrator** is the only entrypoint (`opencode.json` → `orchestrator` agent). It reads `config.yaml`, probes `.intermediate/<asset>/<NNN>/` for existing artifacts, decides which step to run next, and invokes subagents through OpenCode's Task tool. Subagents never talk to each other; the orchestrator passes context between them.
+
+### Subagents (left to right)
+
+Each subagent writes **one artifact** and exits:
+
+| Subagent | Role in the diagram | Output |
+|----------|---------------------|--------|
+| **Analyser** | Reads the source image and decomposes the object into moving parts | `parts.json` (Parts IR) |
+| **Image Gen** | Does not generate images itself — runs `openai_imagegen.py` per part | `component_images/*.png` |
+| **Placement** | Arranges GLBs to match the source image in position and scale | `assembly.json` (Layout IR) per iteration |
+| **Critic** | Scores rendered views against the source image | `critic.json` (Critique IR) |
+
+Between subagent steps the orchestrator runs **tool scripts** directly: `build_component_prompts.py`, `fal_image_to_3d.py`, `blender_measure_glbs.py`, `compute_placement_scales.py`, `blender_assemble.py`, `blender_render_views.py`, and finally `blender_export_usd.py`.
+
+**Human gates** (shown as return arrows to the user in the diagram): you review `parts.json` before any 3D generation, and the best placement iteration before USD export (`placement.confirmed`).
+
+**Placement ↔ critic loop** (the **N×** arrow): each round, placement writes `assembly.json`, Blender assembles and renders four views, and the critic returns a score plus per-component fixes. Placement iteration 2+ applies only those corrections. The loop stops when `config.yaml` exit conditions are met; the orchestrator keeps the best-scoring iteration.
+
+### Model runtime
+
+Subagents reason through your logged-in OpenCode model (Codex OAuth). Model names are not hardcoded in the repo — the harness handles LLM calls; Dexter's prompts and permissions live in `.opencode/agents/*.md`.
+
+### Tools
+
+The red **Tools** box is deterministic code the orchestrator runs via bash:
+
+- **Image gen** — `openai_imagegen.py` (`OPENAI_API_KEY`)
+- **Mesh gen** — `fal_image_to_3d.py` (`FAL_KEY`)
+- **Blender** — measure GLBs, assemble scenes, render critique views, export USD
+
+> **Diagram vs v0 code:** The harness image may show a **Joint Gen** subagent that emits URDF. In the current repo, articulation export is not a separate subagent — after you approve placement, the orchestrator runs `blender_export_usd.py` to produce `robot.usda`.
+
+### Outputs
+
+The pipeline produces two deliverables:
+
+1. **Articulated asset** — per-part GLBs assembled under a parent-child hierarchy, exported as `robot.usda` (+ `textures/`) for Isaac Sim
+2. **Blender output** — `iterations/<B>/assembled.blend`, the best visual assembly from the critic loop
+
+All intermediate files accumulate under `.intermediate/<asset>/<NNN>/`. See [Pipeline Run](/getting-started/pipeline-run) for a step-by-step walkthrough with real outputs.
 
 ## Architecture sections
 
 | Topic | Page | What it covers |
 |-------|------|---------------|
 | **Agentic loop** | [Agentic Loop](/architecture/agentic-loop) | Full pipeline flow, human gates, loop exit rules |
-| **Agents** | [Agents](/architecture/agents) | Orchestrator + five subagents, permissions, prompts |
+| **Agents** | [Agents](/architecture/agents) | Orchestrator + four subagents, permissions, prompts |
 | **Intermediate Representation** | [IR](/architecture/intermediate-representation) | Parts IR, Layout IR, Critique IR, data flow |
 | **Schemas** | [Schemas](/architecture/schemas) | JSON Schema validation for every artifact |
 | **Tool Scripts** | [Tools](/architecture/tools) | Deterministic Python and Blender scripts |
@@ -66,16 +75,6 @@ dexter/
 ```
 
 Pipeline output: `.intermediate/<asset>/<NNN>/` (gitignored).
-
-## Source of truth hierarchy
-
-When documentation disagrees with executable files, trust in this order:
-
-1. `opencode.json` and `.opencode/agents/*.md`
-2. `config.yaml`
-3. `tool_scripts/` and `schemas/`
-4. `AGENTS.md`
-5. This documentation site
 
 ## Downstream consumers
 
