@@ -12,7 +12,7 @@ loop. Field mapping:
     assets[].rotation  -> links[].origin.rpy_deg
     assets[].scale     -> links[].scale
 
-``collision_mesh`` is filled in as ``component_meshes_simp/<name>.obj`` and
+``collision_mesh`` is set to the same path as ``visual_mesh`` (GLB).
 ``robot_name`` defaults to the run directory name (override with --robot-name).
 
 Run::
@@ -51,7 +51,7 @@ def convert(place_assets: dict, robot_name: str | None) -> dict:
                 "name": asset["name"],
                 "parent": asset.get("parent"),
                 "visual_mesh": asset["path"],
-                "collision_mesh": f"component_meshes_simp/{asset['name']}.obj",
+                "collision_mesh": asset["path"],
                 "origin": {
                     "xyz": asset["location"],
                     "rpy_deg": asset["rotation"],

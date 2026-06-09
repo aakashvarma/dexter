@@ -74,16 +74,10 @@ the next free `NNN` (or reuse the one they name).
    The script skips any image that already has a `.glb`, so re-running only fills
    in missing GLBs. If it fails (e.g. fal credits), report which GLBs are missing
    and stop; the user can rerun this step later.
-6. export meshes: run
-   `blender --background --python tool_scripts/blender_export_meshes.py -- --glbs-dir <run_dir>/component_glbs --output-dir <run_dir>/component_meshes`.
-   Skip if `component_meshes/` already has one `.obj` per GLB.
-7. simplify meshes: run
-   `blender --background --python tool_scripts/blender_simplify_meshes.py -- --input-dir <run_dir>/component_meshes --output-dir <run_dir>/component_meshes_simp --target-faces <urdf.target_faces from config.yaml>`.
-   Skip if `component_meshes_simp/` already has one `.obj` per source mesh.
-8. measure: run
+6. measure: run
    `blender --background --python tool_scripts/blender_measure_glbs.py -- --glbs-dir <run_dir>/component_glbs --output <run_dir>/component_dims.json`.
    Skip if `component_dims.json` already exists.
-9. placement hints: **This step is mandatory before the first placement iteration.**
+7. placement hints: **This step is mandatory before the first placement iteration.**
 
    a. Look at the source image and estimate the object's real-world bounding box:
       width (X), depth (Y), height (Z) in metres. Use domain knowledge (e.g.
@@ -122,7 +116,7 @@ the next free `NNN` (or reuse the one they name).
       `hinge_side`, or `slide_axis` in `parts.json` and rerun — **do not patch the
       hints file manually**.
 
-   Skip step 9 only if `placement_hints.json` already exists and `root_world_dims`
+   Skip step 7 only if `placement_hints.json` already exists and `root_world_dims`
    + `config_used` in it match your current estimates. If you change any flag or
    edit `parts.json`, delete and regenerate the hints file.
 
@@ -178,29 +172,27 @@ on your own.
 - Skip this gate only if `<run_dir>/placement.confirmed` already exists; read `B`
   from that file for all physics-export steps below.
 
-## Physics export (after placement is confirmed)
+## USD export (after placement is confirmed)
 
-Turn `iterations/<B>/assembled.blend` into an Isaac Sim (PhysX) asset, where `B`
-is the iteration id in `<run_dir>/placement.confirmed`. Do not start this section
-until that file exists. Read the `physics` block in `config.yaml` for the values
-below. Each step is resume-first: skip it if its output already exists and is valid.
+Export `iterations/<B>/assembled.blend` to USD, where `B` is the iteration id in
+`<run_dir>/placement.confirmed`. Do not start until that file exists. Read
+`usd.root_prim_path` from `config.yaml`. Skip if `robot.usda` already exists.
 
-1. extract scene: run
-   `blender --background --python tool_scripts/blender_extract_scene.py -- --blend iterations/<B>/assembled.blend --output <run_dir>/scene.json --root-prim-path <physics.root_prim_path>`.
-   Skip if `scene.json` exists.
-2. physics spec: invoke the `physics_spec` subagent (Task tool) with the source
-   image attached and the paths to `<run_dir>/scene.json`, `<run_dir>/parts.json`,
-   and `<run_dir>/component_dims.json`, asking it to write
-   `<run_dir>/physics_spec.json`. Skip if it exists and is valid.
-3. export USD: run
-   `blender --background --python tool_scripts/blender_export_usd.py -- --blend iterations/<B>/assembled.blend --output <run_dir>/robot.usda --root-prim-path <physics.root_prim_path>`.
-   Skip if `robot.usda` exists.
-4. apply physics: run
-   `python3 tool_scripts/apply_physics_spec.py --usd <run_dir>/robot.usda --spec <run_dir>/physics_spec.json --output <run_dir>/robot_physics.usda`.
-   Skip if `robot_physics.usda` exists.
+Run:
+```
+blender --background --python tool_scripts/blender_export_usd.py -- \
+    --blend <run_dir>/iterations/<B>/assembled.blend \
+    --output <run_dir>/robot.usda \
+    --root-prim-path <usd.root_prim_path>
+```
 
-Report the final deliverable `<run_dir>/robot_physics.usda` (the Isaac Sim-ready
-asset) alongside the best `iterations/<B>/assembled.blend`.
+The script packs all embedded textures and writes them to `<run_dir>/textures/`
+alongside the USD so Isaac Sim can resolve material paths.  It also writes
+`<run_dir>/robot_prim_map.json` mapping every Blender object name to its USD prim
+path.
+
+Report the final deliverable `<run_dir>/robot.usda` alongside the best
+`iterations/<B>/assembled.blend`.
 
 ## Validation and retries
 
@@ -223,12 +215,11 @@ loop finished but that file is missing, stop at the placement human gate.
   source.png
   parts.json
   component_dims.json
-  placement_hints.json  # from compute_placement_scales.py (step 9)
+  placement_hints.json  # from compute_placement_scales.py (step 7)
   placement.confirmed   # human-approved iteration id (e.g. 006)
   iterations/<n>/
     assembly.json  assembled.blend  renders/  critic.json
-  scene.json            # from blender_extract_scene.py (confirmed iteration)
-  physics_spec.json     # from physics_spec subagent
-  robot.usda            # from blender_export_usd.py (geometry only)
-  robot_physics.usda    # from apply_physics_spec.py (Isaac Sim-ready)
+  robot.usda            # final deliverable — geometry + materials (blender_export_usd.py)
+  robot_prim_map.json   # Blender object name -> USD prim path
+  textures/             # texture images extracted by blender_export_usd.py
 ```
