@@ -1,0 +1,63 @@
+# Dexter
+
+**Dexter** (short for **dexterity**) is an agentic pipeline that turns a single product photograph into an **articulated 3D asset** ready for robotic simulation in NVIDIA Isaac Sim and similar stacks.
+
+Give it a reference image of an everyday object — a dishwasher, refrigerator, cabinet — and Dexter produces individual part meshes, a kinematic tree, joint definitions, and a URDF/USD package that simulators can load and actuate.
+
+![Dexter cover](/assets/images/dexter/cover.png)
+
+## The problem
+
+Training robot manipulation policies requires thousands of teleoperation trajectories across many environments and object types. Simulators let you scale past the physical world, but every interactive object in a scene needs a 3D model broken into moving parts with correct joint definitions. That work is done by hand today and does not scale.
+
+Recent image-to-3D models (Hunyuan3D, SAM3D, etc.) can generate a mesh from a photo in minutes — but they output a **single solid shape** with no moving parts. A dishwasher generated this way is one fused block; you cannot open the door or pull out the rack in simulation.
+
+Dexter targets that bottleneck: given a reference image, it produces an **articulated asset** with separate part meshes, a layout IR, joint definitions, and exportable URDF/USD.
+
+## What Dexter produces
+
+An articulated asset is many rigid **links** (chassis, door, rack) connected by **joints**. Motion changes joint angles or slides — not a single frozen mesh:
+
+![Articulated hexapod example](/assets/images/dexter/articulated_asset_example.gif)
+
+*An articulated hexapod: legs rotate on hinge joints while the body stays one rigid link.*
+
+Dexter's output per run:
+
+| Deliverable | Description |
+|-------------|-------------|
+| Per-part meshes | `component_glbs/<part>.glb` — one GLB per moving part |
+| Layout IR | `assembly.json` — position, orientation, scale for each link |
+| Parts IR | `parts.json` — kinematic tree and joint types |
+| Critique IR | `critic.json` — score and per-component layout fixes |
+| USD export | `robot.usda` + `textures/` — loadable in Isaac Sim |
+
+## How it works (at a glance)
+
+Dexter runs through [OpenCode](https://opencode.ai), a coding agent harness. An **orchestrator** agent sequences five subagents and deterministic tool scripts, pausing at two human gates:
+
+![OpenCode agent harness](/assets/images/dexter/opencode_agent_harness.png)
+
+*The orchestrator routes input through five subagents; model runtimes and tools sit outside the loop.*
+
+See [Architecture](/architecture/overview) for the full system design.
+
+## Quick start
+
+```bash
+pip install -r requirements.txt
+export OPENAI_API_KEY=...   # component PNG generation
+export FAL_KEY=...          # fal.ai image-to-3D
+opencode run --agent orchestrator -- "build the dishwasher from input_images/dishwasher.png"
+```
+
+Full setup: [Requirements](/getting-started/requirements) → [Installation](/getting-started/installation) → [Running a Pipeline](/getting-started/running).
+
+## Documentation
+
+| Section | Contents |
+|---------|----------|
+| [Getting Started](/getting-started/requirements) | Requirements, installation, configuration, running |
+| [Architecture](/architecture/overview) | Agentic loop, agents, IRs, schemas, tool scripts |
+| [Sample Runs](/sample-runs/dishwasher) | Full dishwasher walkthrough with images and video |
+| [Developer Guide](/contributing/overview) | Project structure, extending the pipeline, local dev |

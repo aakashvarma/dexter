@@ -1,5 +1,7 @@
 # Dexter — Articulated Asset Agent System
 
+📖 **[Full documentation](docs/)** — setup, architecture, agents, schemas, tool scripts, and guides. Run `cd docs && pnpm i && pnpm dev` to browse locally.
+
 Turn a single product image into an assembled, critiqued 3D asset. The
 **orchestrator** OpenCode agent (`.opencode/agents/orchestrator.md`) owns all
 control flow. Five OpenCode subagents do the reasoning; tool scripts do the

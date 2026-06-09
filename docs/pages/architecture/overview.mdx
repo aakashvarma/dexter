@@ -1,0 +1,88 @@
+# Architecture Overview
+
+Dexter is an **orchestrator-driven agentic pipeline**. One primary OpenCode agent coordinates deterministic tool scripts and five specialized subagents. There is no standalone Python pipeline driver — the orchestrator is the only entrypoint.
+
+## System diagram
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     OpenCode Runtime                         │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │              orchestrator (primary agent)              │  │
+│  │  • reads config.yaml                                   │  │
+│  │  • probes .intermediate/ for existing artifacts        │  │
+│  │  • invokes subagents via Task tool                     │  │
+│  │  • runs tool scripts via bash                          │  │
+│  │  • enforces human gates and loop exit rules            │  │
+│  └──────────┬──────────────┬──────────────┬───────────────┘  │
+│             │              │              │                   │
+│  ┌──────────▼──┐  ┌───────▼──────┐  ┌───▼──────────────┐   │
+│  │  Subagents  │  │ Tool Scripts │  │  JSON Schemas    │   │
+│  │  (5 LLMs)   │  │  (Python +   │  │  (validation     │   │
+│  │             │  │   Blender)   │  │   gates)         │   │
+│  └─────────────┘  └──────────────┘  └──────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+         │                    │                    │
+         ▼                    ▼                    ▼
+   OpenCode model      OpenAI / fal.ai       .intermediate/
+   (Codex OAuth)       Blender (local)       <asset>/<NNN>/
+```
+
+![OpenCode agent harness](/assets/images/dexter/opencode_agent_harness.png)
+
+## Design principles
+
+| Principle | Description |
+|-----------|-------------|
+| **Orchestrator decides everything** | Subagents write one artifact each. No agent-to-agent communication. |
+| **Resume from disk** | Probe `.intermediate/<asset>/<NNN>/` before every step; skip valid existing artifacts. |
+| **Human gates** | Review `parts.json` before 3D generation; review best placement before USD export. |
+| **Schema gates** | Every subagent JSON validated against JSON Schema before proceeding. |
+| **One IR, two outputs** | `assembly.json` drives Blender renders; best `assembled.blend` drives USD export. |
+| **Prompt-orchestrated v0** | Model determines routing and exit conditions — fast to iterate; production would use explicit state machine. |
+
+## Architecture sections
+
+| Topic | Page | What it covers |
+|-------|------|---------------|
+| **Agentic loop** | [Agentic Loop](/architecture/agentic-loop) | Full pipeline flow, human gates, loop exit rules |
+| **Agents** | [Agents](/architecture/agents) | Orchestrator + five subagents, permissions, prompts |
+| **Intermediate Representation** | [IR](/architecture/intermediate-representation) | Parts IR, Layout IR, Critique IR, data flow |
+| **Schemas** | [Schemas](/architecture/schemas) | JSON Schema validation for every artifact |
+| **Tool Scripts** | [Tools](/architecture/tools) | Deterministic Python and Blender scripts |
+
+## Repository layout
+
+```
+dexter/
+├── .opencode/agents/     # Agent prompts (orchestrator + subagents)
+├── config.yaml           # Pipeline knobs
+├── opencode.json         # Agent definitions and permissions
+├── schemas/              # JSON Schema files
+├── tool_scripts/         # Deterministic pipeline scripts
+├── input_images/         # Source product photos
+├── AGENTS.md             # Agent-facing source of truth
+└── docs/                 # This documentation site
+```
+
+Pipeline output: `.intermediate/<asset>/<NNN>/` (gitignored).
+
+## Source of truth hierarchy
+
+When documentation disagrees with executable files, trust in this order:
+
+1. `opencode.json` and `.opencode/agents/*.md`
+2. `config.yaml`
+3. `tool_scripts/` and `schemas/`
+4. `AGENTS.md`
+5. This documentation site
+
+## Downstream consumers
+
+Dexter produces URDF/USD packages consumed by:
+
+- **NVIDIA Isaac Sim** — primary target; PhysX articulation from USD prims
+- **Genesis World** — URDF, MJCF, GLB, USD import
+- **ROS** — URDF for MoveIt, Gazebo
+
+Dexter does **not** run inside any simulator — it is the step before those tools get useful content.

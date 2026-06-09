@@ -1,0 +1,126 @@
+# Installation
+
+Step-by-step setup after confirming [Requirements](/getting-started/requirements).
+
+## 1. Clone the repository
+
+```bash
+git clone https://github.com/aakashvarma/dexter.git
+cd dexter
+```
+
+## 2. Install OpenCode
+
+```bash
+curl -fsSL https://opencode.ai/install | bash
+# alternatives:
+# npm install -g opencode-ai
+# brew install anomalyco/tap/opencode
+```
+
+Verify:
+
+```bash
+opencode --version
+```
+
+## 3. Authenticate OpenCode
+
+Subagents use your logged-in OpenCode model (Codex OAuth). No model names are hardcoded in the repo.
+
+```bash
+opencode          # open the TUI
+/connect          # select "opencode", authenticate at opencode.ai/auth
+```
+
+## 4. Initialise OpenCode for this project
+
+```bash
+cd /path/to/dexter
+opencode
+/init             # analyses the project and writes AGENTS.md
+```
+
+`AGENTS.md` at the repo root is the agent-facing source of truth for pipeline semantics.
+
+## 5. Install Python dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+If you use a virtual environment (recommended):
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+## 6. Install Blender
+
+**macOS (Homebrew):**
+
+```bash
+brew install --cask blender
+```
+
+**Linux (Ubuntu):**
+
+```bash
+sudo snap install blender --classic
+```
+
+**Verify:**
+
+```bash
+blender --version
+```
+
+If Blender is not on PATH, set the full path in `config.yaml`:
+
+```yaml
+paths:
+  blender_binary: /Applications/Blender.app/Contents/MacOS/Blender
+```
+
+## 7. Set environment variables
+
+Add to your shell profile (`~/.zshrc`, `~/.bashrc`):
+
+```bash
+export OPENAI_API_KEY=sk-...
+export FAL_KEY=...
+```
+
+Reload: `source ~/.zshrc`
+
+## 8. (Optional) Install documentation site
+
+```bash
+cd docs
+npm install
+npm run dev    # http://localhost:3000
+```
+
+## Verify installation
+
+```bash
+# From repo root
+python3 -c "import fal_client, openai, jsonschema, yaml; print('Python OK')"
+blender --background --version
+test -n "$OPENAI_API_KEY" && echo "OpenAI OK"
+test -n "$FAL_KEY" && echo "fal OK"
+opencode --version && echo "OpenCode OK"
+```
+
+## Troubleshooting installation
+
+| Problem | Fix |
+|---------|-----|
+| `blender: command not found` | Install Blender or set `paths.blender_binary` in `config.yaml` |
+| `ModuleNotFoundError: fal_client` | `pip install -r requirements.txt` in active venv |
+| OpenCode `/connect` fails | Check network; try `npm install -g opencode-ai` |
+| Blender hangs on first run | Normal on macOS — grant permissions in System Settings |
+
+Next: [Configuration](/getting-started/configuration)

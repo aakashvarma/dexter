@@ -1,0 +1,162 @@
+# Configuration
+
+All pipeline knobs live in `config.yaml` at the repo root. The orchestrator reads this file at the start of every run. Agent definitions and permissions are in `opencode.json`.
+
+## config.yaml reference
+
+```yaml
+paths:
+  input_dir: input_images
+  intermediate_root: .intermediate
+  schemas_dir: schemas
+  tool_scripts_dir: tool_scripts
+  blender_binary: blender
+
+loop:
+  min_loops: 1
+  max_loops: 5
+  score_threshold: 85
+  max_validation_retries: 2
+  no_improvement_patience: 2
+
+image_generation:
+  background_instruction: "Isolate only this part, centered on a plain white background, with no other parts visible."
+  model: "gpt-image-2"
+  size: "1024x1024"
+  quality: "medium"
+
+fal:
+  endpoint: fal-ai/hunyuan-3d/v3.1/pro/image-to-3d
+  generate_type: Normal
+  enable_pbr: true
+  face_count: 40000
+  download_timeout_seconds: 300
+  image_extensions: [".png", ".jpg", ".jpeg", ".webp"]
+
+render:
+  resolution: [1920, 1080]
+  samples: 64
+  engine: CYCLES
+  file_format: PNG
+
+usd:
+  root_prim_path: /World/Robot
+```
+
+## paths
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `input_dir` | `input_images` | Source product photos |
+| `intermediate_root` | `.intermediate` | Per-asset, per-run output tree (gitignored) |
+| `schemas_dir` | `schemas` | JSON Schema files |
+| `tool_scripts_dir` | `tool_scripts` | Deterministic pipeline scripts |
+| `blender_binary` | `blender` | Blender executable name or full path |
+
+## loop
+
+Controls the placement ↔ critic iteration loop.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `min_loops` | `1` | Always run at least this many iterations |
+| `max_loops` | `5` | Hard cap |
+| `score_threshold` | `85` | Stop when score reaches this (and N ≥ min_loops) |
+| `max_validation_retries` | `2` | Re-invoke subagent on schema failure |
+| `no_improvement_patience` | `2` | Stop if best score hasn't improved for N consecutive iterations |
+
+**Exit rule** — stop when **any** of:
+
+1. `score >= score_threshold` **and** `N >= min_loops`
+2. `N >= max_loops`
+3. Score plateaued for `no_improvement_patience` iterations
+
+The orchestrator keeps the **best-scoring** iteration if a later one regresses.
+
+## image_generation
+
+Templated into `openai_imagegen.json` by the orchestrator before invoking the imagegen subagent.
+
+| Key | Default | Options |
+|-----|---------|---------|
+| `background_instruction` | white background text | Appended to every component prompt |
+| `model` | `gpt-image-2` | `gpt-image-2`, `dall-e-3` |
+| `size` | `1024x1024` | `1024x1024`, `1536x1024`, `1024x1536` |
+| `quality` | `medium` | `low`, `medium`, `high` |
+
+## fal
+
+Templated into `fal_image_to_3d.json`.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `endpoint` | `fal-ai/hunyuan-3d/v3.1/pro/image-to-3d` | fal.ai model |
+| `generate_type` | `Normal` | Passed to fal API |
+| `enable_pbr` | `true` | PBR materials on meshes |
+| `face_count` | `40000` | Target mesh density |
+| `download_timeout_seconds` | `300` | GLB download timeout |
+| `image_extensions` | `[".png", ...]` | Extensions to pick up |
+
+## render
+
+Defaults for `render_views.json` (orchestrator-written each iteration).
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `resolution` | `[1920, 1080]` | Pixels |
+| `samples` | `64` | Cycles samples |
+| `engine` | `CYCLES` | Render engine |
+| `file_format` | `PNG` | Output format |
+
+## usd
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `root_prim_path` | `/World/Robot` | USD root prim for all geometry |
+
+## opencode.json
+
+Agent definitions, temperatures, prompt file paths, and permissions.
+
+| Agent | Mode | Writes | Bash allowed |
+|-------|------|--------|--------------|
+| `orchestrator` | primary | `.intermediate/**`, config JSONs | `python*`, `blender*`, `cp`, `mkdir` |
+| `analyze` | subagent | `parts.json` | `validate_json.py` only |
+| `imagegen` | subagent | `component_images/` | `openai_imagegen.py` only |
+| `placement` | subagent | `assembly.json` | `validate_json.py` only |
+| `critic` | subagent | `critic.json` | `validate_json.py` only |
+| `physics_spec` | subagent | `physics_spec.json` | `validate_json.py` only |
+
+Subagent prompts: `.opencode/agents/*.md`
+
+## Tuning presets
+
+**Faster iteration** (lower quality critique):
+
+```yaml
+loop:
+  max_loops: 3
+render:
+  resolution: [1280, 720]
+  samples: 32
+```
+
+**Higher quality** (more iterations, better renders):
+
+```yaml
+loop:
+  max_loops: 8
+  score_threshold: 90
+render:
+  samples: 128
+```
+
+**Cheaper image gen:**
+
+```yaml
+image_generation:
+  quality: "low"
+  size: "1024x1024"
+```
+
+Next: [Running a Pipeline](/getting-started/running)

@@ -1,0 +1,177 @@
+# Tool Scripts
+
+Deterministic Python and Blender scripts handle all non-LLM work. The orchestrator runs these via bash; subagents run only their scoped scripts. All scripts live in `tool_scripts/`.
+
+## Script index
+
+| Script | Runtime | Input | Output |
+|--------|---------|-------|--------|
+| `build_component_prompts.py` | Python | `parts.json` | `prompts.json` |
+| `openai_imagegen.py` | Python | `prompts.json` + `source.png` | `component_images/*.png` |
+| `fal_image_to_3d.py` | Python | `component_images/` | `component_glbs/*.glb` |
+| `blender_measure_glbs.py` | Blender | `component_glbs/` | `component_dims.json` |
+| `compute_placement_scales.py` | Python | `parts.json` + `component_dims.json` | `placement_hints.json` |
+| `blender_assemble.py` | Blender | `assembly.json` | `assembled.blend` |
+| `blender_render_views.py` | Blender | `assembled.blend` + `render_views.json` | `renders/*.png` |
+| `blender_export_usd.py` | Blender | `assembled.blend` | `robot.usda` + `textures/` |
+| `validate_json.py` | Python | JSON + schema | exit 0/1 |
+
+Utility scripts: `build_urdf.py`, `view_urdf.py`, `place_assets_to_assembly.py`, `blender_export_meshes.py`.
+
+---
+
+## Image generation
+
+### build_component_prompts.py
+
+Reads `parts.json`, writes one prompt per part to `prompts.json`.
+
+```bash
+python3 tool_scripts/build_component_prompts.py \
+  --config .intermediate/dishwasher/001/build_component_prompts.json
+```
+
+Config: `parts_path`, `output_path`, `background_instruction`.
+
+### openai_imagegen.py
+
+Calls OpenAI `images.edit()` for each prompt. Requires `OPENAI_API_KEY`.
+
+```bash
+export OPENAI_API_KEY=sk-...
+python3 tool_scripts/openai_imagegen.py \
+  --config .intermediate/dishwasher/001/openai_imagegen.json
+```
+
+Config: `prompts_path`, `output_dir`, `model`, `size`, `quality`, `reference_image_path` (must be `source.png`).
+
+Skips prompts whose output PNG already exists.
+
+---
+
+## 3D mesh generation
+
+### fal_image_to_3d.py
+
+Converts component PNGs to GLBs via fal.ai Hunyuan 3D. Requires `FAL_KEY`.
+
+```bash
+export FAL_KEY=...
+python3 tool_scripts/fal_image_to_3d.py \
+  --config .intermediate/dishwasher/001/fal_image_to_3d.json
+```
+
+Per image: upload → call API → download GLB. Skips images that already have a matching `.glb`.
+
+---
+
+## Blender scripts
+
+All require args after `--`:
+
+```bash
+blender --background --python tool_scripts/<script>.py -- --arg value
+```
+
+### blender_measure_glbs.py
+
+```bash
+blender --background --python tool_scripts/blender_measure_glbs.py -- \
+  --glbs-dir .intermediate/dishwasher/001/component_glbs \
+  --output .intermediate/dishwasher/001/component_dims.json
+```
+
+### blender_assemble.py
+
+Imports GLBs, applies transforms from `assembly.json`, parents hierarchy, saves `.blend`.
+
+```bash
+blender --background --python tool_scripts/blender_assemble.py -- \
+  --layout .intermediate/dishwasher/001/iterations/006/assembly.json \
+  --output .intermediate/dishwasher/001/iterations/006/assembled.blend
+```
+
+### blender_render_views.py
+
+Auto-frames cameras along `direction` vectors, renders with Cycles.
+
+```bash
+blender --background --python tool_scripts/blender_render_views.py -- \
+  --blend iterations/006/assembled.blend \
+  --cameras iterations/006/render_views.json \
+  --output-dir iterations/006/renders/
+```
+
+Standard four views: `front`, `top`, `left`, `isometric`.
+
+### blender_export_usd.py
+
+Exports to USD with Z-up, textures extracted to `textures/`.
+
+```bash
+blender --background --python tool_scripts/blender_export_usd.py -- \
+  --blend iterations/006/assembled.blend \
+  --output robot.usda \
+  --root-prim-path /World/Robot
+```
+
+Also writes `robot_prim_map.json` (Blender name → USD prim path).
+
+---
+
+## Placement helpers
+
+### compute_placement_scales.py
+
+Pre-computes scales and poses from `parts.json` geometry fields.
+
+```bash
+python3 tool_scripts/compute_placement_scales.py \
+  --parts  .intermediate/dishwasher/001/parts.json \
+  --dims   .intermediate/dishwasher/001/component_dims.json \
+  --output .intermediate/dishwasher/001/placement_hints.json \
+  --root-world-dims 0.60 0.60 0.85 \
+  --open-angle-deg 90 \
+  --pullout-fraction 0.5
+```
+
+Flags:
+- `--root-world-dims W D H` — real-world root size in metres (required)
+- `--open-angle-deg` — revolute open angle (default 90)
+- `--pullout-fraction` — prismatic pull-out depth (default 0.5)
+- `--child-world-dims NAME W D H` — override specific part (repeatable)
+
+---
+
+## Validation
+
+### validate_json.py
+
+```bash
+python3 tool_scripts/validate_json.py \
+  --schema schemas/assembly.schema.json \
+  --data .intermediate/dishwasher/001/iterations/006/assembly.json
+```
+
+---
+
+## Config-driven pattern
+
+The orchestrator templates config JSONs from `config.yaml` before running scripts:
+
+| Orchestrator writes | Script reads |
+|--------------------|-------------|
+| `build_component_prompts.json` | `build_component_prompts.py` |
+| `openai_imagegen.json` | `openai_imagegen.py` |
+| `fal_image_to_3d.json` | `fal_image_to_3d.py` |
+
+API keys are **never** in config files — scripts read from environment.
+
+## Idempotency
+
+| Script | Skip behavior |
+|--------|--------------|
+| `openai_imagegen.py` | Skips existing PNGs |
+| `fal_image_to_3d.py` | Skips existing GLBs |
+| `blender_measure_glbs.py` | Orchestrator skips if `component_dims.json` exists |
+| `blender_export_usd.py` | Orchestrator skips if `robot.usda` exists |

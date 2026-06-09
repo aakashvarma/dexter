@@ -1,0 +1,135 @@
+# Requirements
+
+Before installing Dexter, confirm your environment meets every requirement below. Missing any one of these will block a pipeline run at a specific step.
+
+## System requirements
+
+| Requirement | Minimum | Used for |
+|-------------|---------|----------|
+| **OS** | macOS 12+, Linux (Ubuntu 20.04+) | Blender, OpenCode |
+| **Python** | 3.10+ | Tool scripts, JSON validation |
+| **Blender** | 3.6+ (4.x recommended) | GLB measurement, assembly, rendering, USD export |
+| **RAM** | 8 GB | Blender Cycles rendering (4 views × 1920×1080) |
+| **Disk** | ~500 MB per run | Images, GLBs, blends, renders, USD |
+| **Network** | Required | OpenAI, fal.ai, OpenCode API calls |
+
+## Software dependencies
+
+### OpenCode (agent runtime)
+
+Dexter has **no standalone Python pipeline driver**. The OpenCode `orchestrator` agent is the only entrypoint. You need:
+
+- OpenCode CLI installed and authenticated
+- A connected model via Codex OAuth (`/connect` in the OpenCode TUI)
+
+```bash
+curl -fsSL https://opencode.ai/install | bash
+opencode --version   # verify
+```
+
+### Python packages
+
+From `requirements.txt`:
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `fal_client` | latest | fal.ai Hunyuan 3D image-to-mesh API |
+| `openai` | latest | OpenAI `images.edit()` for component PNGs |
+| `requests` | latest | HTTP downloads (GLB files from fal.ai) |
+| `jsonschema` | latest | JSON Schema validation gate |
+| `pyyaml` | latest | `config.yaml` parsing |
+
+```bash
+pip install -r requirements.txt
+python3 -c "import fal_client, openai, jsonschema, yaml; print('OK')"
+```
+
+### Blender
+
+Blender must be callable as `blender` on your `PATH`, or set `paths.blender_binary` in `config.yaml`:
+
+```bash
+blender --version
+# macOS alternative:
+# /Applications/Blender.app/Contents/MacOS/Blender --version
+```
+
+Blender is used for four pipeline steps:
+
+1. `blender_measure_glbs.py` — raw bounding boxes per GLB
+2. `blender_assemble.py` — build scene from `assembly.json`
+3. `blender_render_views.py` — diagnostic PNG renders for the critic
+4. `blender_export_usd.py` — final USD export for Isaac Sim
+
+All Blender scripts run in background mode:
+
+```bash
+blender --background --python tool_scripts/blender_assemble.py -- --layout <path> --output <path>
+```
+
+Arguments after `--` go to the Python script, not Blender.
+
+## API keys and accounts
+
+| Variable | Service | Required when | Get it |
+|----------|---------|---------------|--------|
+| `OPENAI_API_KEY` | OpenAI Images API | Image generation step | [platform.openai.com](https://platform.openai.com) |
+| `FAL_KEY` | fal.ai Hunyuan 3D | 3D mesh generation step | [fal.ai](https://fal.ai) |
+| OpenCode auth | OpenCode / Codex | All agent steps | `opencode` → `/connect` |
+
+```bash
+export OPENAI_API_KEY=sk-...
+export FAL_KEY=...
+```
+
+API keys are **never** stored in config files or committed to the repo. Scripts read them from the environment at runtime.
+
+## Cost estimate per run
+
+Costs vary by part count and placement loop iterations:
+
+| Service | Approximate cost | Notes |
+|---------|-----------------|-------|
+| OpenCode (analyze, placement, critic) | Depends on plan | Subagents use your logged-in model |
+| OpenAI Images (`gpt-image-2`) | ~$0.02–0.10 per PNG | One PNG per part |
+| fal.ai Hunyuan 3D | ~$0.10–0.50 per GLB | One GLB per part |
+| Blender | Free | Local compute |
+
+A 4-part dishwasher with 5–6 placement iterations typically costs **$2–5** in API fees.
+
+## Input image requirements
+
+Place source photos in `input_images/`. Supported formats: PNG, JPG, JPEG, WebP.
+
+| Guideline | Why |
+|-----------|-----|
+| Single object, clear view | Analyze agent needs to see distinct moving parts |
+| Neutral/plain background | White backgrounds work best for imagegen isolation |
+| Show articulation state | If doors are open or drawers extended, placement matches that pose |
+| ≥ 512×512 resolution | 1024×1024 or higher recommended |
+
+Bundled examples: `input_images/dishwasher.png`, `refrigerator.png`, `washingmachine.png`.
+
+## Pre-flight checklist
+
+Run these before your first pipeline:
+
+```bash
+# Python deps
+python3 -c "import fal_client, openai, jsonschema, yaml; print('Python OK')"
+
+# Blender
+blender --background --version
+
+# API keys
+test -n "$OPENAI_API_KEY" && echo "OPENAI_API_KEY set" || echo "MISSING: OPENAI_API_KEY"
+test -n "$FAL_KEY" && echo "FAL_KEY set" || echo "MISSING: FAL_KEY"
+
+# OpenCode
+opencode --version
+
+# JSON validator
+python3 tool_scripts/validate_json.py --help
+```
+
+Next: [Installation](/getting-started/installation)

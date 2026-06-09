@@ -1,0 +1,187 @@
+# Local Development
+
+Workflow for developing and testing Dexter changes locally.
+
+## Environment setup
+
+```bash
+git clone https://github.com/aakashvarma/dexter.git
+cd dexter
+
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+export OPENAI_API_KEY=sk-...
+export FAL_KEY=...
+
+# OpenCode
+curl -fsSL https://opencode.ai/install | bash
+opencode
+/connect
+```
+
+## Running the pipeline locally
+
+```bash
+# Full run
+opencode run --agent orchestrator -- "build the dishwasher from input_images/dishwasher.png"
+
+# Resume
+opencode run --agent orchestrator -- "resume .intermediate/dishwasher/001/"
+
+# OpenCode TUI (interactive)
+opencode
+```
+
+## Testing individual scripts
+
+Scripts can be run independently for debugging, outside the agent loop.
+
+### Python scripts
+
+```bash
+# Validate JSON
+python3 tool_scripts/validate_json.py \
+  --schema schemas/parts.schema.json \
+  --data .intermediate/dishwasher/001/parts.json
+
+# Placement hints
+python3 tool_scripts/compute_placement_scales.py \
+  --parts  .intermediate/dishwasher/001/parts.json \
+  --dims   .intermediate/dishwasher/001/component_dims.json \
+  --output /tmp/placement_hints.json \
+  --root-world-dims 0.60 0.60 0.85
+```
+
+### Blender scripts
+
+```bash
+blender --background --python tool_scripts/blender_assemble.py -- \
+  --layout .intermediate/dishwasher/001/iterations/006/assembly.json \
+  --output /tmp/test_assembled.blend
+
+# Open result
+blender /tmp/test_assembled.blend
+```
+
+### Image generation (costs API credits)
+
+```bash
+export OPENAI_API_KEY=sk-...
+python3 tool_scripts/openai_imagegen.py \
+  --config .intermediate/dishwasher/001/openai_imagegen.json
+```
+
+## Developing agent prompts
+
+1. Edit `.opencode/agents/<agent>.md`
+2. No restart needed — OpenCode reads prompts at invocation time
+3. Test by invoking the specific step:
+
+```bash
+# Test analyze agent in isolation
+opencode run --agent analyze -- "analyze input_images/dishwasher.png and write parts.json to .intermediate/dishwasher/002/parts.json"
+
+# Test full pipeline with your changes
+opencode run --agent orchestrator -- "build the dishwasher from input_images/dishwasher.png"
+```
+
+## Developing documentation
+
+```bash
+cd docs
+npm install
+npm run dev    # http://localhost:3000
+```
+
+Build check:
+
+```bash
+npm run build  # must pass with 0 errors
+```
+
+Media files go in `docs/public/assets/`. Reference in MDX:
+
+```markdown
+![alt](/assets/images/dexter/image.png)
+
+<video controls width="100%">
+  <source src="/assets/video/dexter/video.mp4" type="video/mp4" />
+</video>
+```
+
+## Iterating on a specific pipeline step
+
+### Placement loop only
+
+If one-time steps are complete:
+
+```bash
+# Delete iterations to redo placement
+rm -rf .intermediate/dishwasher/001/iterations/004/
+opencode run --agent orchestrator -- "resume .intermediate/dishwasher/001/"
+```
+
+### Single iteration manual test
+
+1. Edit `assembly.json` manually
+2. Run blender_assemble + render + validate
+3. Inspect renders in `iterations/<N>/renders/`
+
+```bash
+ITER=.intermediate/dishwasher/001/iterations/006
+
+blender --background --python tool_scripts/blender_assemble.py -- \
+  --layout $ITER/assembly.json --output $ITER/assembled.blend
+
+blender --background --python tool_scripts/blender_render_views.py -- \
+  --blend $ITER/assembled.blend \
+  --cameras $ITER/render_views.json \
+  --output-dir $ITER/renders/
+```
+
+### Bring your own assembly
+
+Write `assembly.json` by hand or with `place_assets_to_assembly.py`, validate, then assemble:
+
+```bash
+python3 tool_scripts/validate_json.py \
+  --schema schemas/assembly.schema.json \
+  --data my_assembly.json
+```
+
+## Debugging tips
+
+| Problem | Debug approach |
+|---------|---------------|
+| Wrong scale | Compare `child_scale` in hints vs assembly; compute world size manually |
+| Wrong position | Open `assembled.blend`, check pivot empties |
+| Schema failure | Run `validate_json.py` directly, read error paths |
+| Agent ignores instructions | Check prompt file path in `opencode.json`; verify permissions |
+| Step not skipped on resume | Check if output exists AND validates; invalid JSON triggers redo |
+| Blender script fails | Run with `--background` and check stderr; test with GUI: `blender --python script.py` |
+
+## Config for faster dev iteration
+
+Create a local override mindset in `config.yaml`:
+
+```yaml
+loop:
+  max_loops: 3
+render:
+  resolution: [1280, 720]
+  samples: 32
+image_generation:
+  quality: "low"
+```
+
+Do not commit dev-only config unless the team agrees.
+
+## What to verify before submitting changes
+
+1. `python3 tool_scripts/validate_json.py` passes on any changed schemas with valid fixtures
+2. Agent prompt changes tested with at least one pipeline step
+3. Tool script changes tested with `--help` and a real run against `.intermediate/` artifacts
+4. `npm run build` passes in `docs/` if documentation changed
+5. `AGENTS.md` updated if pipeline order or semantics changed

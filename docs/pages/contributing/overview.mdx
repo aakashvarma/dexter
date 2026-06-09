@@ -1,0 +1,50 @@
+# Developer Guide
+
+This section is for contributors extending Dexter — adding agents, modifying schemas, writing tool scripts, or changing pipeline behavior.
+
+## Design philosophy
+
+Dexter v0 is **prompt-orchestrated**: the model determines routing, branching, and exit conditions. This makes it fast to experiment with loop structure before committing to a hardened state machine.
+
+Key principles for contributors:
+
+1. **Trust executable files over prose** — `opencode.json`, `.opencode/agents/*.md`, `config.yaml`, `tool_scripts/`, and `schemas/` are source of truth
+2. **One artifact per subagent** — subagents write exactly one file and exit
+3. **Orchestrator owns control flow** — ordering, retries, gates, stop conditions
+4. **Schema gates everywhere** — validate JSON after every subagent write
+5. **Resume from disk** — never assume a step ran; probe `.intermediate/` first
+6. **Minimal diffs** — match existing conventions; don't over-engineer
+
+## What v0 deliberately does not solve
+
+- **Fault tolerance** — a subagent that produces a weak IR passes it forward silently
+- **Stateful backtracking** — no retry logic inside subagent nodes
+- **Multi-object scenes** — one object per run
+- **Production orchestration** — prompt-based routing vs explicit state machine
+
+The natural next step for production: replace prompt orchestration with an explicit graph — fixed transitions, deterministic branching, typed IRs at each edge.
+
+## Developer guide sections
+
+| Topic | Page |
+|-------|------|
+| Repo layout and key files | [Project Structure](/contributing/project-structure) |
+| Adding agents, steps, gates | [Extending the Pipeline](/contributing/extending-pipeline) |
+| JSON Schema conventions | [Schemas & Validation](/contributing/schemas-and-validation) |
+| Local dev workflow | [Local Development](/contributing/local-development) |
+
+## Prerequisites for contributors
+
+- Python 3.10+, Blender 3.6+, OpenCode CLI
+- Familiarity with JSON Schema, OpenCode agent config, and the [Architecture](/architecture/overview) docs
+- Read `AGENTS.md` at the repo root — it is what OpenCode agents see
+
+## Contribution workflow
+
+1. Read `AGENTS.md` and the relevant agent prompt in `.opencode/agents/`
+2. Make changes to prompts, schemas, scripts, or config
+3. Validate schemas: `python3 tool_scripts/validate_json.py --schema schemas/<name>.schema.json --data <test.json>`
+4. Run a test pipeline on a bundled input image
+5. Update documentation if behavior changes
+
+There is no checked-in test runner, lint, or CI. Focused verification is JSON Schema validation and manual pipeline runs.
