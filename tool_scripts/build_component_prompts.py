@@ -5,10 +5,19 @@ What it does
 Reads a JSON config pointing at a ``parts.json`` file and, for every part,
 writes one image-generation prompt of the form::
 
-    Generate <part> Without the following: <other parts>
+    Use the attached source image as the visual reference. It shows the full object
+    and is being divided into N parts: part1, part2, ...
+    Generate <name>: <description>
+    Show the complete component from an isometric-style angle that reveals as much
+    of its shape as possible.
+    Without the following (leave their positions in the frame empty):
+    - <other1> - <description1>
+    - <other2> - <description2>
+    <background_instruction>
 
-A white-background instruction is appended to each prompt. The result is
-written to ``output_path`` for ``openai_generate_components.py`` to consume.
+The source image is attached separately to the generation call as a visual
+reference — descriptions are intentionally brief since the model can see the
+image directly.
 
 Run::
 
@@ -74,19 +83,39 @@ def readable(name: str) -> str:
     return name.replace("_", " ").strip()
 
 
-def build_prompt(part_name: str, other_names: list[str], background: str) -> str:
+def build_prompt(
+    part: dict,
+    other_parts: list[dict],
+    all_part_names: list[str],
+    background: str,
+) -> str:
     """Build the image-generation prompt for one part.
 
     Args:
-        part_name: Name of the part to generate.
-        other_names: Names of every other part to exclude.
+        part: Part entry from ``parts.json`` with ``name`` and ``description``.
+        other_parts: Every other part entry to exclude.
+        all_part_names: Readable names of every part (for the context line).
         background: Background instruction appended to the prompt.
 
     Returns:
         The full prompt string.
     """
-    others = ", ".join(readable(n) for n in other_names) or "nothing"
-    return f"Generate {readable(part_name)} Without the following: {others}. {background}"
+    name = readable(part["name"])
+    description = part["description"].strip()
+    parts_list = ", ".join(all_part_names)
+    exclusion_lines = "\n".join(
+        f"- {readable(other['name'])} - {other['description'].strip()}"
+        for other in other_parts
+    ) or "- nothing"
+    return (
+        f"Use the attached source image as the visual reference. "
+        f"It shows the full object and is being divided into {len(all_part_names)} parts: {parts_list}.\n"
+        f"Generate {name}: {description}\n"
+        f"Show the complete component from an isometric-style angle that reveals as much of its shape as possible.\n"
+        f"Without the following (leave their positions in the frame empty):\n"
+        f"{exclusion_lines}\n"
+        f"{background}"
+    )
 
 
 def build_prompts(parts: dict, background: str) -> list[dict]:
@@ -99,14 +128,16 @@ def build_prompts(parts: dict, background: str) -> list[dict]:
     Returns:
         List of ``{component, prompt, output_filename}`` dictionaries.
     """
-    names = [part["name"] for part in parts["parts"]]
+    part_entries = parts["parts"]
+    all_part_names = [readable(p["name"]) for p in part_entries]
     prompts = []
-    for name in names:
-        others = [other for other in names if other != name]
+    for part in part_entries:
+        name = part["name"]
+        others = [other for other in part_entries if other["name"] != name]
         prompts.append(
             {
                 "component": name,
-                "prompt": build_prompt(name, others, background),
+                "prompt": build_prompt(part, others, all_part_names, background),
                 "output_filename": f"{name}.png",
             }
         )
