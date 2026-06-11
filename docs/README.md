@@ -46,7 +46,7 @@ The docs site is a Next.js app in this directory. Vercel builds it when changes 
 6. Set **Production Branch** to `main`.
 7. Deploy.
 
-`vercel.json` in this folder skips builds when a push does not touch `docs/`.
+`vercel.json` in this folder skips builds when a push does not touch this directory (the ignore command uses `.` because Vercel runs it from the Root Directory).
 
 ### After setup
 
