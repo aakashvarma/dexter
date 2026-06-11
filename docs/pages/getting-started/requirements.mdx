@@ -56,10 +56,10 @@ blender --version
 
 Blender is used for four pipeline steps:
 
-1. `blender_measure_glbs.py` — raw bounding boxes per GLB
-2. `blender_assemble.py` — build scene from `assembly.json`
-3. `blender_render_views.py` — diagnostic PNG renders for the critic
-4. `blender_export_usd.py` — final USD export for Isaac Sim
+1. `blender_measure_glbs.py`: raw bounding boxes per GLB
+2. `blender_assemble.py`: build scene from `assembly.json`
+3. `blender_render_views.py`: diagnostic PNG renders for the critic
+4. `blender_export_usd.py`: final USD export for Isaac Sim
 
 All Blender scripts run in background mode:
 
@@ -91,11 +91,11 @@ Costs vary by part count and placement loop iterations:
 | Service | Approximate cost | Notes |
 |---------|-----------------|-------|
 | OpenCode (analyze, critic) | Depends on plan | Subagents use your logged-in model |
-| OpenAI Images (`gpt-image-2`) | ~$0.02–0.10 per PNG | One PNG per part |
-| fal.ai Hunyuan 3D | ~$0.10–0.50 per GLB | One GLB per part |
+| OpenAI Images (`gpt-image-2`) | ~$0.02-0.10 per PNG | One PNG per part |
+| fal.ai Hunyuan 3D | ~$0.10-0.50 per GLB | One GLB per part |
 | Blender | Free | Local compute |
 
-A 4-part dishwasher with 5–6 placement iterations typically costs **$2–5** in API fees.
+A 4-part dishwasher with 5-6 placement iterations typically costs **$2-5** in API fees.
 
 ## Input image requirements
 

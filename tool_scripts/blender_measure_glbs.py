@@ -10,12 +10,13 @@ Run::
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 import bpy  # type: ignore[import-not-found]
 from mathutils import Vector  # type: ignore[import-not-found]
 
-from common import parse_blender_args, write_json_file
+from common import parse_blender_args, validate_schema, write_json_file
 
 
 def clear_scene() -> None:
@@ -53,11 +54,22 @@ def main() -> None:
     args = parse_blender_args(parser)
 
     glbs_dir = Path(args.glbs_dir).expanduser().resolve()
-    parts = {path.stem: measure_glb(path) for path in sorted(glbs_dir.glob("*.glb"))}
+    if not glbs_dir.is_dir():
+        sys.exit(f"Error: glbs dir not found: {glbs_dir}")
+
+    glb_paths = sorted(glbs_dir.glob("*.glb"))
+    if not glb_paths:
+        sys.exit(f"Error: no .glb files in {glbs_dir}")
 
     output_path = Path(args.output).expanduser().resolve()
+    try:
+        parts = {path.stem: measure_glb(path) for path in glb_paths}
+    except RuntimeError as exc:
+        sys.exit(f"Error: {exc}")
+
     write_json_file(output_path, {"parts": parts})
     print(f"Wrote {output_path}")
+    validate_schema("component_dims.schema.json", output_path)
 
 
 if __name__ == "__main__":

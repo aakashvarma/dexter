@@ -3,7 +3,7 @@ import { Steps } from 'nextra/components'
 
 # Installation & Run
 
-Everything you need to set up Dexter and run the pipeline through the **OpenCode TUI**. Confirm [Requirements](/getting-started/requirements) first — missing Blender, API keys, or OpenCode auth will block specific steps.
+Everything you need to set up Dexter and run the pipeline through the **OpenCode TUI**. Confirm [Requirements](/getting-started/requirements) first, missing Blender, API keys, or OpenCode auth will block specific steps.
 
 ---
 
@@ -42,7 +42,7 @@ From the repo root inside OpenCode:
 /init
 ```
 
-This writes `AGENTS.md` — the agent-facing source of truth for pipeline semantics.
+This writes `AGENTS.md`: the agent-facing source of truth for pipeline semantics.
 
 ### Install Python dependencies
 
@@ -121,7 +121,7 @@ The orchestrator copies the image to `.intermediate/<asset>/<NNN>/source.png`, p
 
 ### Respond at human gates
 
-The run pauses twice for your input — do not let the agent continue on its own:
+The run pauses twice for your input, do not let the agent continue on its own:
 
 | Gate | When | What to review |
 |------|------|----------------|
@@ -164,15 +164,15 @@ The orchestrator lists `.intermediate/<asset>/<NNN>/` before every step and **sk
 
 High-level flow (orchestrator-owned; two subagents handle analyze and critic):
 
-1. **Analyze** — source image → `parts.json`
-2. **Parts gate** — you confirm the part list
-3. **Components** — `generate_components.py` → PNGs, GLBs, `component_dims.json`
-4. **Placement init** — `initialize_placement.py` → `placement_init.json` + `iterations/001/assembly.json`
-5. **Placement ↔ critic loop** — assemble → render → critique → apply corrections until stop conditions hit
-6. **Placement gate** — you approve the best layout
-7. **USD export** — `robot.usda` + `textures/` + `robot_prim_map.json`
+1. **Analyze**: source image → `parts.json`
+2. **Parts gate**: you confirm the part list
+3. **Components**: `generate_components.py` → PNGs, GLBs, `component_dims.json`
+4. **Placement init**: `initialize_placement.py` → `iterations/001/assembly.json` (with pre-computed `node_scale` / `node_origin`)
+5. **Placement ↔ critic loop**: assemble → render → critique → apply corrections until stop conditions hit
+6. **Placement gate**: you approve the best layout
+7. **USD export**: `robot.usda` + `textures/` + `robot_prim_map.json`
 
-Placement iterations are **append-only**. To tweak layout after the gate, start a new iteration through the critic loop — do not delete `iterations/` or redo analyze/components.
+Placement iterations are **append-only**. To tweak layout after the gate, start a new iteration through the critic loop, do not delete `iterations/` or redo analyze/components.
 
 Loop stops when **any** of: score ≥ `loop.score_threshold` (and N ≥ `min_loops`), N ≥ `max_loops`, or score has not improved for `no_improvement_patience` iterations. The best-scoring iteration is kept even if a later one regresses.
 
@@ -187,7 +187,6 @@ Every run writes to `.intermediate/<asset>/<NNN>/` (gitignored):
 ├── source.png
 ├── parts.json
 ├── component_dims.json
-├── placement_init.json
 ├── component_images/
 ├── component_glbs/
 ├── iterations/
@@ -211,9 +210,9 @@ Every run writes to `.intermediate/<asset>/<NNN>/` (gitignored):
 
 ## Optional settings
 
-All knobs live in [`configs/base.yaml`](https://github.com/aakashvarma/dexter/blob/main/configs/base.yaml). **Defaults work for a first run** — only change these when you have a specific reason.
+All knobs live in [`configs/base.yaml`](https://github.com/aakashvarma/dexter/blob/main/configs/base.yaml). **Defaults work for a first run**: only change these when you have a specific reason.
 
-<Callout type="info" emoji="⚙️">
+<Callout type="info">
 **Loop behaviour** (`loop` in `configs/base.yaml`)
 
 | Key | Default | What it does |
@@ -226,7 +225,7 @@ All knobs live in [`configs/base.yaml`](https://github.com/aakashvarma/dexter/bl
 Faster iteration: lower `max_loops` to `3`. Higher quality: raise `max_loops` to `8` and `score_threshold` to `90`.
 </Callout>
 
-<Callout type="info" emoji="🖼️">
+<Callout type="info">
 **Component images** (`image_generation`)
 
 Controls OpenAI image generation in `generate_components.py`. Paths are relative to `<run_dir>/`.
@@ -235,13 +234,13 @@ Controls OpenAI image generation in `generate_components.py`. Paths are relative
 |-----|---------|--------------|
 | `model` | `gpt-image-2` | Image model (`dall-e-3` also supported) |
 | `size` | `1024x1024` | Output resolution |
-| `quality` | `medium` | `low` / `medium` / `high` — lower saves cost |
+| `quality` | `medium` | `low` / `medium` / `high`: lower saves cost |
 | `background_instruction` | white background text | Appended to every part prompt |
 
 Cheaper runs: set `quality: "low"`.
 </Callout>
 
-<Callout type="info" emoji="🧊">
+<Callout type="info">
 **3D meshes** (`fal`)
 
 Controls fal.ai image-to-3D in `generate_components.py`.
@@ -254,7 +253,7 @@ Controls fal.ai image-to-3D in `generate_components.py`.
 | `download_timeout_seconds` | `300` | GLB download timeout |
 </Callout>
 
-<Callout type="info" emoji="📷">
+<Callout type="info">
 **Render quality** (`render`)
 
 Defaults the orchestrator uses when writing `render_views.json` each iteration.
@@ -268,17 +267,17 @@ Defaults the orchestrator uses when writing `render_views.json` each iteration.
 Faster previews: `[1280, 720]` resolution and `samples: 32`.
 </Callout>
 
-<Callout type="info" emoji="📁">
+<Callout type="info">
 **Paths** (`paths`)
 
 | Key | Default | What it does |
 |-----|---------|--------------|
-| `blender_binary` | `blender` | Blender executable — set full path if not on PATH |
+| `blender_binary` | `blender` | Blender executable, set full path if not on PATH |
 | `input_dir` | `input_images` | Bundled source photos |
 | `intermediate_root` | `.intermediate` | Run output root |
 </Callout>
 
-<Callout type="info" emoji="📦">
+<Callout type="info">
 **USD export** (`usd`)
 
 | Key | Default | What it does |
@@ -287,7 +286,7 @@ Faster previews: `[1280, 720]` resolution and `samples: 32`.
 </Callout>
 
 <Callout type="warning">
-**Agent permissions** live in `opencode.json`, not `base.yaml`. Subagent prompts are under `.opencode/agents/`. Change these only when extending the pipeline — see [Extending the Pipeline](/contributing/extending-pipeline).
+**Agent permissions** live in `opencode.json`, not `base.yaml`. Subagent prompts are under `.opencode/agents/`. Change these only when extending the pipeline, see [Extending the Pipeline](/contributing/extending-pipeline).
 </Callout>
 
 ---
@@ -299,7 +298,7 @@ Faster previews: `[1280, 720]` resolution and `samples: 32`.
 | `blender: command not found` | Install Blender or set `paths.blender_binary` in `configs/base.yaml` |
 | `ModuleNotFoundError: fal_client` | `pip install -r requirements.txt` in your active venv |
 | OpenCode `/connect` fails | Check network; try `npm install -g opencode-ai` |
-| Blender hangs on first run | Normal on macOS — grant permissions in System Settings |
+| Blender hangs on first run | Normal on macOS, grant permissions in System Settings |
 
 ---
 

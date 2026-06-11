@@ -1,4 +1,4 @@
-/* Typography — Inter, tight tracking, medium headings */
+/* Typography: Inter, tight tracking, medium headings */
 :root {
   --font-sans: var(--font-inter), system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
 }
@@ -66,33 +66,6 @@
   letter-spacing: -0.02em;
 }
 
-/* Cyberfont — self-hosted from docs/public/fonts/Cyberfont.woff */
-@font-face {
-  font-family: 'Cyberfont';
-  src: url('/fonts/Cyberfont.woff') format('woff');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-/* Intro page title */
-.nextra-content .dexter-intro-title {
-  font-family: 'Cyberfont', sans-serif;
-  font-weight: 400;
-  font-size: clamp(2.75rem, 8vw, 4.25rem);
-  letter-spacing: 0.02em;
-  line-height: 1.1;
-  margin-bottom: 1.25rem;
-  color: #fcee0a;
-  text-shadow:
-    -2px 2px 0 #00e5ff,
-    -4px 4px 0 rgba(0, 229, 255, 0.4);
-}
-
-html.dark .nextra-content .dexter-intro-title {
-  color: #fcee0a;
-}
-
 /* Footer banner */
 .dexter-footer {
   margin-top: 3rem;
@@ -158,6 +131,15 @@ html.dark .dexter-footer-tagline {
   border-radius: 12px;
 }
 
+/* Callouts: text-only notes, no emoji or type icons */
+.nextra-callout > div:first-child {
+  display: none;
+}
+
+.nextra-callout {
+  padding-inline-start: 1rem;
+}
+
 /* Per-page hierarchical heading numbers (h1 = page title, unnumbered) */
 .nextra-content h2::before {
   counter-increment: h2;
@@ -174,7 +156,7 @@ html.dark .dexter-footer-tagline {
   content: counter(h2) '.' counter(h3) '.' counter(h4) ' ';
 }
 
-/* Dark mode — pure black surfaces */
+/* Dark mode: pure black surfaces */
 html.dark {
   background-color: #000;
   color-scheme: dark;

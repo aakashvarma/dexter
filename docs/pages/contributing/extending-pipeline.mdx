@@ -4,7 +4,7 @@ How to add agents, pipeline steps, human gates, or modify existing behavior.
 
 ## Adding a new subagent
 
-### 1. Write the agent prompt
+### Write the agent prompt
 
 Create `.opencode/agents/<name>.md`:
 
@@ -30,7 +30,7 @@ Follow existing conventions:
 - Validate after writing
 - No communication with other subagents
 
-### 2. Register in opencode.json
+### Register in opencode.json
 
 ```json
 {
@@ -57,11 +57,11 @@ Follow existing conventions:
 
 If the agent needs to run a specific script, allow only that script in bash permissions.
 
-### 3. Create a JSON Schema
+### Create a JSON Schema
 
 Add `schemas/<name>.schema.json` with `additionalProperties: false` on all objects.
 
-### 4. Update the orchestrator prompt
+### Update the orchestrator prompt
 
 Edit `.opencode/agents/orchestrator.md` to:
 
@@ -70,7 +70,7 @@ Edit `.opencode/agents/orchestrator.md` to:
 - Specify output path and skip conditions
 - Add validation call after the step
 
-### 5. Update AGENTS.md
+### Update AGENTS.md
 
 Add the step to the pipeline order section so `opencode /init` stays accurate.
 
@@ -78,7 +78,7 @@ Add the step to the pipeline order section so `opencode /init` stays accurate.
 
 ## Adding a new tool script
 
-### 1. Write the script
+### Write the script
 
 Place in `tool_scripts/`. Include a module docstring with:
 
@@ -93,7 +93,7 @@ Follow existing patterns:
 - API keys from environment, never from config files
 - Idempotent where possible (skip existing outputs)
 
-### 2. Grant orchestrator bash permission
+### Grant orchestrator bash permission
 
 In `opencode.json`, add to orchestrator's bash allowlist:
 
@@ -108,7 +108,7 @@ In `opencode.json`, add to orchestrator's bash allowlist:
 
 Broad `python*` / `blender*` patterns already cover new scripts.
 
-### 3. Wire into orchestrator prompt
+### Wire into orchestrator prompt
 
 Add step with:
 
@@ -116,7 +116,7 @@ Add step with:
 - Exact bash command
 - Skip condition (which output file to check)
 
-### 4. Add config block (optional)
+### Add config block (optional)
 
 If the script needs tunable settings, add a block to `configs/base.yaml` and document it.
 
@@ -159,11 +159,11 @@ loop:
 
 ### Change critic behavior
 
-Edit `.opencode/agents/critic.md` — scoring guidance, lock criteria, correction types.
+Edit `.opencode/agents/critic.md`: scoring guidance, lock criteria, correction types.
 
 ### Change placement starting point
 
-Edit `initialize_placement.py` or geometry fields in `parts.json` (then delete `placement_init.json` and `iterations/001/assembly.json` to regenerate).
+Edit geometry fields in `parts.json` (then delete `iterations/001/assembly.json` and rerun `initialize_placement.py`). To change how transforms are derived, edit `recompute_blender_transforms` in `common.py`.
 
 ---
 
@@ -207,10 +207,10 @@ Skip if <output_path> already exists and validates, unless the user asks to redo
 
 v0 is prompt-orchestrated. For production:
 
-1. **Explicit state machine** — replace orchestrator prompt routing with a Python/TypeScript graph
-2. **Typed IRs at each edge** — schema validation becomes compile-time, not runtime
-3. **Fault tolerance** — retry/backtrack nodes when IR quality is below threshold
-4. **Deterministic branching** — exit conditions as code, not model judgment
-5. **Audit log** — record every agent input/output for debugging
+1. **Explicit state machine**: replace orchestrator prompt routing with a Python/TypeScript graph
+2. **Typed IRs at each edge**: schema validation becomes compile-time, not runtime
+3. **Fault tolerance**: retry/backtrack nodes when IR quality is below threshold
+4. **Deterministic branching**: exit conditions as code, not model judgment
+5. **Audit log**: record every agent input/output for debugging
 
-The same stages, agents, schemas, and tools transfer directly — only the control flow layer changes.
+The same stages, agents, schemas, and tools transfer directly, only the control flow layer changes.

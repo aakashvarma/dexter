@@ -4,9 +4,9 @@
 dexter/
 ├── .opencode/
 │   └── agents/                  # Agent prompts (source of truth for behavior)
-│       ├── orchestrator.md      # Orchestrator agent — owns all control flow
-│       ├── analyze.md           # Analyze subagent — parts decomposition
-│       └── critic.md            # Critic subagent — critique IR writer
+│       ├── orchestrator.md      # Orchestrator agent, owns all control flow
+│       ├── analyze.md           # Analyze subagent, parts decomposition
+│       └── critic.md            # Critic subagent, critique IR writer
 │
 ├── configs/
 │   └── base.yaml                # Pipeline knobs (loops, fal, render, USD)
@@ -17,7 +17,6 @@ dexter/
 │   ├── parts.schema.json
 │   ├── assembly.schema.json
 │   ├── critic.schema.json
-│   ├── placement_init.schema.json
 │   ├── render_views.schema.json
 │   └── component_dims.schema.json
 │
@@ -63,13 +62,13 @@ The orchestrator agent has broad bash permissions (`python*`, `blender*`). Subag
 
 Read by the orchestrator agent at run start. Contains:
 
-- `paths` — directories and blender binary
-- `loop` — iteration exit conditions
-- `image_generation` — OpenAI model settings
-- `fal` — fal.ai 3D model settings
-- `placement_init` — paths for `initialize_placement.py`
-- `render` — Blender render defaults
-- `usd` — USD export settings
+- `paths`: directories and blender binary
+- `loop`: iteration exit conditions
+- `image_generation`: OpenAI model settings
+- `fal`: fal.ai 3D model settings
+- `placement_init`: paths for `initialize_placement.py`
+- `render`: Blender render defaults
+- `usd`: USD export settings
 
 ### AGENTS.md
 
@@ -77,7 +76,7 @@ Concise pipeline semantics for agents: step order, gates, gotchas. When in doubt
 
 ### .opencode/agents/*.md
 
-The actual instructions each agent follows. The orchestrator agent prompt is the most detailed — it specifies exact step ordering and gate behavior.
+The actual instructions each agent follows. The orchestrator agent prompt is the most detailed; it specifies exact step ordering and gate behavior.
 
 ### schemas/
 
@@ -96,7 +95,6 @@ Gitignored. Structure per run:
   source.png
   parts.json
   component_dims.json
-  placement_init.json
   component_images/
   component_glbs/
   iterations/<NNN>/

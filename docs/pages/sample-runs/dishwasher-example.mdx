@@ -23,11 +23,11 @@ flowchart TD
 
 The run identified four parts: `dishwasher_cabinet`, `front_door`, `upper_dish_rack`, and `lower_dish_rack`.
 
-## 1. Start the run
+## Start the run
 
 You prompt the orchestrator in OpenCode. It copies the input image to `source.png` under `.intermediate/dishwasher/001/` and checks which files already exist before each step.
 
-## 2. analyze subagent
+## Analyze subagent
 
 The analyze subagent reads `source.png` and writes `parts.json`. Each entry has a name, description, parent part, joint type, and size and pose in metres.
 
@@ -52,11 +52,11 @@ In this run the cabinet is the fixed root (~0.60 × 0.60 × 0.85 m). The front d
 
 ![Source input image](/assets/images/dexter/run/source.png)
 
-## 3. Parts review
+## Parts review
 
 The orchestrator pauses. You confirm part names, joint types, and placement numbers before any 3D generation runs.
 
-## 4. generate_components.py
+## Component generation
 
 This script runs once after parts approval. For each part it builds an image prompt from the description, calls OpenAI to produce an isolated PNG (using `source.png` as reference), sends the PNG to fal.ai for a GLB, and measures raw mesh bounds with Blender.
 
@@ -73,31 +73,31 @@ Four PNGs and four GLBs were written. Raw sizes in `component_dims.json` are pre
   <source src="/assets/video/dexter/component_glbs.mp4" type="video/mp4" />
 </video>
 
-## 5. initialize_placement.py
+## Initial placement
 
-This script reads poses from `parts.json` and raw mesh sizes from `component_dims.json`. It writes `placement_init.json` and `iterations/001/assembly.json`. No subagent is involved.
+This script reads poses from `parts.json` and raw mesh sizes from `component_dims.json`, computes Blender `node_scale` and `node_origin`, and writes `iterations/001/assembly.json`. No subagent is involved.
 
 | | |
 |---|---|
 | **Input** | `parts.json`, `component_dims.json` |
-| **Output** | `placement_init.json`, `iterations/001/assembly.json` |
+| **Output** | `iterations/001/assembly.json` |
 
 The cabinet sits at the origin at metre scale. The door and racks use the closed poses from `parts.json`.
 
-## 6. Placement loop
+## Placement loop
 
 Each round lives in `iterations/NNN/`. Iteration 001 uses the assembly from step 5. Later iterations start with `update_placement.py`, which applies the previous `critic.json` to produce the next `assembly.json`.
 
-### 6a. blender_assemble.py
+### Assemble scene
 
-Loads each GLB, parents parts in the kinematic tree, and positions meshes to match `world_size`, `world_center`, and `euler_deg` in `assembly.json`.
+Loads each GLB, parents parts in the kinematic tree, and applies the pre-computed `node_scale`, `node_origin`, and `euler_deg` from `assembly.json`.
 
 | | |
 |---|---|
 | **Input** | `assembly.json` |
 | **Output** | `assembled.blend` |
 
-### 6b. render_views.json
+### Render view configuration
 
 The orchestrator writes four camera definitions (front, top, left, isometric) from `configs/base.yaml` render defaults.
 
@@ -105,7 +105,7 @@ The orchestrator writes four camera definitions (front, top, left, isometric) fr
 |---|---|
 | **Output** | `iterations/NNN/render_views.json` |
 
-### 6c. blender_render_views.py
+### Render views
 
 Renders one PNG per camera from the assembled scene.
 
@@ -114,7 +114,7 @@ Renders one PNG per camera from the assembled scene.
 | **Input** | `assembled.blend`, `render_views.json` |
 | **Output** | `renders/*.png` |
 
-### 6d. critic subagent
+### Critic evaluation
 
 The critic subagent receives `source.png`, the four renders, and `assembly.json`. It writes `critic.json` with a score and per-part corrections. Correct parts are marked `locked`. Others may get `corrected_world_size`, `corrected_world_center`, or `suggested_rotation_delta`.
 
@@ -138,7 +138,7 @@ The first layout came from `initialize_placement.py`. The cabinet and door were 
 | `upper_dish_rack` | `corrected_world_center` |
 | `lower_dish_rack` | `corrected_world_center` |
 
-### 6e. update_placement.py (iteration 2 onward)
+### Update placement
 
 Copies the previous layout and applies critic corrections. Locked parts and parts with no issue entry are unchanged. If a round scores lower than the best so far, the orchestrator can base the next assembly on the best prior layout instead of the most recent one.
 
@@ -161,11 +161,11 @@ The loop ran six times. Iteration 6 scored highest at 86.
 
 The orchestrator selected iteration 6 for placement review.
 
-## 7. Placement review
+## Placement review
 
 You review renders from the best iteration, the critic score, and `assembled.blend`. The orchestrator waits for approval before export.
 
-## 8. blender_export_usd.py
+## USD export
 
 Exports the approved `assembled.blend` to `robot.usda`, writes `robot_prim_map.json`, and extracts textures to `textures/`.
 

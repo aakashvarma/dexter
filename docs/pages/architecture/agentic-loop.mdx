@@ -10,7 +10,7 @@ For a concrete walkthrough with example files, see [Sample Run: Dishwasher](/sam
 flowchart TD
     analyze["analyze subagent\nsource.png → parts.json"] --> gate1{"Human gate:\nconfirm parts.json"}
     gate1 --> components["generate_components.py\n→ component_images/\ncomponent_glbs/\ncomponent_dims.json"]
-    components --> init["initialize_placement.py\n→ placement_init.json\niterations/001/assembly.json"]
+    components --> init["initialize_placement.py\n→ iterations/001/assembly.json"]
 
     subgraph placeLoop ["Placement ↔ Critic loop · iterations/NNN/"]
         init --> assemble["blender_assemble.py\n→ assembled.blend"]
@@ -30,19 +30,19 @@ flowchart TD
 
 ## Pipeline flow
 
-### 1 — Part identification
+### Part identification
 
 The **analyze** subagent reads `source.png` and writes `parts.json`: part names, descriptions, parent names, joint types, and numeric placement (`world_size`, `world_center`, `euler_deg`). The orchestrator pauses for your review before any 3D API calls.
 
-### 2 — Component generation
+### Component generation
 
 `generate_components.py` runs once after parts approval. It produces isolated PNGs (OpenAI), GLBs (fal.ai), and raw mesh measurements (`component_dims.json`). Existing outputs are skipped on re-run.
 
-### 3 — Initial placement
+### Initial placement
 
-`initialize_placement.py` reads world-space poses from `parts.json` and raw mesh sizes from `component_dims.json` to write `placement_init.json` and `iterations/001/assembly.json`. Fully deterministic — no LLM.
+`initialize_placement.py` reads world-space poses from `parts.json` and raw mesh sizes from `component_dims.json`, computes Blender `node_scale` and `node_origin`, and writes `iterations/001/assembly.json`. Fully deterministic. No LLM.
 
-### 4 — Render, critique, refine
+### Render, critique, refine
 
 Each iteration:
 
@@ -51,9 +51,9 @@ Each iteration:
 3. `blender_render_views.py` → four views (front, top, left, isometric)
 4. **critic** subagent → `critic.json`
 
-If the loop continues, `update_placement.py` applies critic corrections to the next `assembly.json`. `locked` parts are unchanged. After a regression, the orchestrator can base the next iteration on the best-scoring layout.
+If the loop continues, `update_placement.py` applies critic corrections to the next `assembly.json` and recomputes `node_scale` / `node_origin`. `locked` parts are unchanged. After a regression, the orchestrator can base the next iteration on the best-scoring layout.
 
-### 5 — USD export
+### USD export
 
 After you approve a layout, `blender_export_usd.py` exports `robot.usda`, `textures/`, and `robot_prim_map.json`.
 
@@ -65,7 +65,7 @@ After you approve a layout, `blender_export_usd.py` exports `robot.usda`, `textu
 | **Parts** | After `parts.json` | Names, descriptions, joint types, sizes and poses |
 | **Placement** | After the critic loop | Best iteration renders, critic score, `assembled.blend` |
 
-Placement iterations are **append-only** — never delete `iterations/` or redo analyze/components to tweak layout. Request changes through a new critic iteration instead.
+Placement iterations are **append-only**: never delete `iterations/` or redo analyze/components to tweak layout. Request changes through a new critic iteration instead.
 </Callout>
 
 <Callout type="info">
@@ -88,7 +88,7 @@ Three OpenCode agents. Prompt files: `.opencode/agents/`. Permissions: `opencode
 
 ### Orchestrator
 
-You talk to the orchestrator only. It coordinates — it does not do creative analysis itself.
+You talk to the orchestrator only. It coordinates; it does not do creative analysis itself.
 
 | | |
 |---|---|
@@ -132,28 +132,27 @@ Compares rendered views to the source photo. For each part it judges scale, posi
 
 | Score | Meaning |
 |-------|---------|
-| 90–100 | All parts correct; no collisions; cosmetic issues only |
-| 75–89 | Recognisable; one or two clear problems |
-| 60–74 | Several issues, but roughly the right shape |
-| below 60 | Fundamentally wrong — floating parts, wrong scale, severe collisions |
+| 90-100 | All parts correct; no collisions; cosmetic issues only |
+| 75-89 | Recognisable; one or two clear problems |
+| 60-74 | Several issues, but roughly the right shape |
+| below 60 | Fundamentally wrong, floating parts, wrong scale, severe collisions |
 
 <Callout type="warning">
-**Permissions** — Every agent writes only inside `.intermediate/`. Subagents can run `common.py` for validation only. They cannot browse the web, call arbitrary scripts, or touch files outside the run directory. No model names or API keys appear in agent prompts.
+**Permissions**: Every agent writes only inside `.intermediate/`. Subagents can run `common.py` for validation only. They cannot browse the web, call arbitrary scripts, or touch files outside the run directory. No model names or API keys appear in agent prompts.
 </Callout>
 
 ---
 
 ## Intermediate representation
 
-Dexter passes data between agents and tools through typed **IRs** — JSON artifacts with defined schemas. Each IR is produced by one agent or script and consumed by the next step.
+Dexter passes data between agents and tools through typed **IRs**: JSON artifacts with defined schemas. Each IR is produced by one agent or script and consumed by the next step.
 
 | IR | File | Producer | Consumer |
 |----|------|----------|----------|
 | **Parts** | `parts.json` | analyze subagent | generate_components, initialize_placement |
 | **Layout** | `assembly.json` | initialize_placement / update_placement | blender_assemble, USD export |
 | **Critique** | `critic.json` | critic subagent | update_placement, orchestrator |
-| **Placement init** | `placement_init.json` | initialize_placement | iteration 001 assembly |
-| **Component dims** | `component_dims.json` | generate_components → blender_measure_glbs | initialize_placement, blender_assemble |
+| **Component dims** | `component_dims.json` | generate_components → blender_measure_glbs | initialize_placement, update_placement |
 | **Render views** | `render_views.json` | orchestrator | blender_render_views |
 
 ### Parts IR (`parts.json`)
@@ -167,7 +166,9 @@ Dexter passes data between agents and tools through typed **IRs** — JSON artif
       "description": "The main dishwasher cabinet with insulated walls.",
       "parent": null,
       "joint_type": "fixed",
-      "world_size": [0.60, 0.60, 0.85]
+      "world_size": [0.60, 0.60, 0.85],
+      "world_center": [0, 0, 0.425],
+      "euler_deg": [0, 0, 0]
     },
     {
       "name": "front_door",
@@ -184,8 +185,8 @@ Dexter passes data between agents and tools through typed **IRs** — JSON artif
 
 - `name` → file stem for PNGs, GLBs, and assembly entries
 - `description` → copied into image generation prompts
-- `world_size` (root) → real-world dimensions in metres
-- Non-root `world_center` / `euler_deg` → copied into the first `assembly.json`
+- `world_size`, `world_center`, `euler_deg` on every part (including root) → world-space pose in metres
+- Copied into the first `assembly.json`; `node_scale` / `node_origin` are derived from `component_dims.json`
 
 ### Layout IR (`assembly.json`)
 
@@ -203,13 +204,15 @@ World-space position, orientation, and size per part in metres. Iteration 001 fr
       "collision_mesh": "component_glbs/cabinet_body.glb",
       "world_size": [0.600, 0.522, 0.876],
       "world_center": [0.0, 0.0, 0.438],
-      "euler_deg": [0.0, 0.0, 0.0]
+      "euler_deg": [0.0, 0.0, 0.0],
+      "node_scale": [1.706, 1.761, 1.785],
+      "node_origin": [-0.001, -0.025, 0.0]
     }
   ]
 }
 ```
 
-`blender_assemble.py` uses `component_dims.json` internally so each GLB's world bounding box matches the stored values — you work in world-space metres, not Blender-local transforms.
+`initialize_placement.py` and `update_placement.py` compute `node_scale` and `node_origin` from `world_*` fields plus `component_dims.json`. `blender_assemble.py` applies those transforms directly.
 
 ### Critique IR (`critic.json`)
 
@@ -244,11 +247,13 @@ World-space position, orientation, and size per part in metres. Iteration 001 fr
 | `locked: true` | Part unchanged |
 | No entry | Part unchanged |
 
+After applying world-space corrections, `update_placement.py` recomputes `node_scale` and `node_origin` for all parts.
+
 ### Supporting artifacts
 
-**`component_dims.json`** — raw GLB bounding boxes before scale. Never compare raw dims to the source image; always derive world size via the assembly IR.
+**`component_dims.json`**: raw GLB bounding boxes before scale. Never compare raw dims to the source image; always derive world size via the assembly IR.
 
-**`placement_init.json`** — pre-computed scales and Blender node offsets. If init looks wrong, fix `parts.json` and delete `placement_init.json` plus `iterations/001/assembly.json` to regenerate.
+If iteration 001 looks wrong, fix `parts.json` and delete `iterations/001/assembly.json`, then rerun `initialize_placement.py`.
 
 ### Data flow
 
@@ -256,7 +261,7 @@ World-space position, orientation, and size per part in metres. Iteration 001 fr
 source.png
   → parts.json
   → component_images/ + component_glbs/ + component_dims.json
-  → placement_init.json + iterations/001/assembly.json
+  → iterations/001/assembly.json
   → assembled.blend → renders/ → critic.json
   → iterations/NNN/assembly.json  (loop)
   → robot.usda
@@ -266,12 +271,12 @@ source.png
 
 ## Tool scripts
 
-Deterministic Python and Blender scripts handle everything that does not need LLM judgment. The orchestrator runs them via bash. API keys come from environment variables — never from config files.
+Deterministic Python and Blender scripts handle everything that does not need LLM judgment. The orchestrator runs them via bash. API keys come from environment variables, never from config files.
 
 | Script | Input → Output |
 |--------|----------------|
 | `generate_components.py` | `parts.json` + `source.png` → PNGs, GLBs, `component_dims.json` |
-| `initialize_placement.py` | `parts.json` + `component_dims.json` → `placement_init.json`, `iterations/001/assembly.json` |
+| `initialize_placement.py` | `parts.json` + `component_dims.json` → `iterations/001/assembly.json` |
 | `update_placement.py` | `assembly.json` + `critic.json` → next `assembly.json` |
 | `blender_assemble.py` | `assembly.json` → `assembled.blend` |
 | `blender_render_views.py` | `assembled.blend` + `render_views.json` → `renders/*.png` |
@@ -279,24 +284,24 @@ Deterministic Python and Blender scripts handle everything that does not need LL
 | `blender_measure_glbs.py` | `component_glbs/` → `component_dims.json` (called by `generate_components.py`) |
 | `common.py` | shared helpers; `--schema` + `--data` → pass or fail |
 
-<Callout type="info" emoji="🖼️">
-**`generate_components.py`** — For each part: OpenAI image edit with `source.png` as reference → fal.ai GLB → `blender_measure_glbs.py` for dims. Skips existing outputs; skips entirely if `component_dims.json` exists.
+<Callout type="info">
+**`generate_components.py`**: For each part: OpenAI image edit with `source.png` as reference → fal.ai GLB → `blender_measure_glbs.py` for dims. Skips existing outputs; skips entirely if `component_dims.json` exists.
 
 ```bash
 python3 tool_scripts/generate_components.py --run-dir .intermediate/dishwasher/001
 ```
 </Callout>
 
-<Callout type="info" emoji="📐">
-**`initialize_placement.py`** — Combines `parts.json` poses with raw mesh sizes to compute Blender `node_scale` and `node_origin`. Writes both `placement_init.json` and `iterations/001/assembly.json`.
+<Callout type="info">
+**`initialize_placement.py`**: Combines `parts.json` poses with raw mesh sizes to compute Blender `node_scale` and `node_origin`, then writes `iterations/001/assembly.json`. Validates inputs and output against their schemas.
 
 ```bash
 python3 tool_scripts/initialize_placement.py --run-dir .intermediate/dishwasher/001
 ```
 </Callout>
 
-<Callout type="info" emoji="🔄">
-**`update_placement.py`** — Copies the previous layout and applies critic corrections. After a regression, pass the best-scoring layout as `--prev-assembly`.
+<Callout type="info">
+**`update_placement.py`**: Applies critic corrections to world-space fields, recomputes `node_scale` / `node_origin`, and validates against `assembly.schema.json`. After a regression, pass the best-scoring layout as `--prev-assembly`.
 
 ```bash
 python3 tool_scripts/update_placement.py \
@@ -306,8 +311,8 @@ python3 tool_scripts/update_placement.py \
 ```
 </Callout>
 
-<Callout type="info" emoji="🧊">
-**Blender scripts** — Arguments must come after `--`:
+<Callout type="info">
+**Blender scripts**: Arguments must come after `--`:
 
 ```bash
 blender --background --python tool_scripts/blender_assemble.py -- \
@@ -330,19 +335,18 @@ python3 tool_scripts/common.py \
   --data <path/to/artifact.json>
 ```
 
-Prints `OK` on success; prints each error and exits 1 on failure. When validation fails, the orchestrator re-invokes the same subagent up to `loop.max_validation_retries` (default: 2).
+Prints `OK` on success; on failure prints each error and a fix hint (`Fix the file to match schemas/...`), then exits 1. Subagents validate their own output; pipeline scripts validate inputs at startup via the same helper (`validate_schema` in `common.py`). When validation fails, the orchestrator re-invokes the same subagent up to `loop.max_validation_retries` (default: 2).
 
 | Schema | Artifact | Written by |
 |--------|----------|-----------|
 | `parts.schema.json` | `parts.json` | analyze subagent |
 | `assembly.schema.json` | `assembly.json` | initialize_placement / update_placement |
 | `critic.schema.json` | `critic.json` | critic subagent |
-| `placement_init.schema.json` | `placement_init.json` | initialize_placement |
 | `render_views.schema.json` | `render_views.json` | orchestrator |
 | `component_dims.schema.json` | `component_dims.json` | blender_measure_glbs |
 
 <Callout type="info">
-**`render_views.schema.json`** — Per camera: `name`, `direction`, `output`, `light_energy`, `light_type`. Optional `margin` (default 1.3). **Do not add `location` or `look_at`** — the render script auto-frames from `direction`.
+**`render_views.schema.json`**: Per camera: `name`, `direction`, `output`, `light_energy`, `light_type`. Optional `margin` (default 1.3). **Do not add `location` or `look_at`**: the render script auto-frames from `direction`.
 </Callout>
 
 <Callout type="info">

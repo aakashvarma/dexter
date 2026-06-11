@@ -11,12 +11,13 @@ Run::
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 import bpy  # type: ignore[import-not-found]
 from mathutils import Vector  # type: ignore[import-not-found]
 
-from common import load_json_file, parse_blender_args
+from common import exit_if_missing, load_json_file, parse_blender_args, validate_schema
 
 DEFAULT_MARGIN = 1.3
 
@@ -80,11 +81,17 @@ def main() -> None:
     parser.add_argument("--output-dir", required=True)
     args = parse_blender_args(parser)
 
-    config = load_json_file(args.cameras)
+    blend_path = Path(args.blend).expanduser().resolve()
+    cameras_path = Path(args.cameras).expanduser().resolve()
+    exit_if_missing(blend_path, "assembled.blend")
+    exit_if_missing(cameras_path, "render_views.json")
+    validate_schema("render_views.schema.json", cameras_path)
+
+    config = load_json_file(cameras_path)
     output_dir = Path(args.output_dir).expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    bpy.ops.wm.open_mainfile(filepath=str(Path(args.blend).expanduser().resolve()))
+    bpy.ops.wm.open_mainfile(filepath=str(blend_path))
 
     scene = bpy.context.scene
     scene.render.engine = config["engine"]

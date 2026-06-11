@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "assembly",
-  "description": "Articulated-asset intermediate representation. Consumed by blender_assemble.py and blender_export_usd.py.\n\nEach part stores world-space metric values. blender_assemble.py back-computes the Blender-native node_scale and node_origin at render time using component_dims.json:\n  parent_world_scale   = world_size[parent] / raw_size[parent]   (accumulated; [1,1,1] for root)\n  node_scale[axis]     = world_size[axis] / (parent_world_scale[axis] × raw_size[axis])\n  node_origin[axis]    = world_center[axis] / parent_world_scale[axis]\n                         − (R(euler_deg) × (node_scale × raw_center))[axis]\n\nDividing by parent_world_scale compensates for Blender scale inheritance (children parented with matrix_parent_inverse=identity inherit the parent node_scale). Children must appear after their parent in the parts array.",
+  "description": "Articulated-asset intermediate representation. Written by initialize_placement.py for iteration 001, then updated by update_placement.py. Consumed by blender_assemble.py and blender_export_usd.py.\n\nEach part stores world-space metric values plus pre-computed Blender transforms. initialize_placement.py and update_placement.py derive node_scale and node_origin from component_dims.json:\n  parent_world_scale   = world_size[parent] / raw_size[parent]   (accumulated; [1,1,1] for root)\n  node_scale[axis]     = world_size[axis] / (parent_world_scale[axis] × raw_size[axis])\n  node_origin[axis]    = world_center[axis] / parent_world_scale[axis]\n                         − (R(euler_deg) × (node_scale × raw_center))[axis]\n\nblender_assemble.py applies node_scale, node_origin, and euler_deg directly. Children must appear after their parent in the parts array.",
   "type": "object",
   "additionalProperties": false,
   "required": ["root", "robot_name", "parts"],
@@ -20,19 +20,39 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["name", "parent", "visual_mesh", "collision_mesh", "world_size", "world_center", "euler_deg"],
+        "required": [
+          "name",
+          "description",
+          "parent",
+          "joint_type",
+          "visual_mesh",
+          "collision_mesh",
+          "world_size",
+          "world_center",
+          "euler_deg",
+          "node_scale",
+          "node_origin"
+        ],
         "properties": {
           "name": {
             "type": "string",
-            "description": "Part name (mesh stem); matches parts.json."
+            "description": "Short, unique snake_case part name used as the image/GLB file stem."
+          },
+          "description": {
+            "type": "string",
+            "description": "One sentence identifying WHAT the part is and WHERE it sits. Used as the image-generation prompt."
           },
           "parent": {
             "type": ["string", "null"],
             "description": "Name of the parent part; null for the root. Children must appear after their parent in the parts array."
           },
+          "joint_type": {
+            "type": "string",
+            "enum": ["fixed", "revolute", "prismatic", "continuous", "floating", "planar"]
+          },
           "visual_mesh": {
             "type": "string",
-            "description": "GLB path (relative to root or absolute) used for high-quality Blender renders."
+            "description": "GLB path (relative to root or absolute) used for high-quality Blender renders. Use component_glbs/<name>.glb."
           },
           "collision_mesh": {
             "type": "string",
@@ -43,21 +63,35 @@
             "items": {"type": "number", "exclusiveMinimum": 0},
             "minItems": 3,
             "maxItems": 3,
-            "description": "World bounding-box dimensions [W, D, H] in metres. blender_assemble.py derives node_scale = world_size / (parent_world_scale × raw_size) from component_dims.json."
+            "description": "World bounding-box dimensions [W, D, H] in metres."
           },
           "world_center": {
             "type": "array",
             "items": {"type": "number"},
             "minItems": 3,
             "maxItems": 3,
-            "description": "World-space centre [x, y, z] in metres of the mesh at its current pose (open for revolute/prismatic joints, closed otherwise). blender_assemble.py derives node_origin = world_center / parent_world_scale − R(euler_deg) × (node_scale × raw_center)."
+            "description": "World-space centre [x, y, z] in metres. Root typically sits on the floor at [0, 0, height/2]."
           },
           "euler_deg": {
             "type": "array",
             "items": {"type": "number"},
             "minItems": 3,
             "maxItems": 3,
-            "description": "XYZ Euler rotation in degrees [roll, pitch, yaw] applied at the part's Blender node. For revolute doors: euler_deg[2]<0 opens a left-hinged door; euler_deg[2]>0 opens a right-hinged door. euler_deg[0]<0 opens a bottom-hinged lid; euler_deg[0]>0 opens a top-hinged lid."
+            "description": "XYZ Euler rotation in degrees [roll, pitch, yaw] applied at the part's Blender node."
+          },
+          "node_scale": {
+            "type": "array",
+            "items": {"type": "number", "exclusiveMinimum": 0},
+            "minItems": 3,
+            "maxItems": 3,
+            "description": "Per-axis stretch factors on the Blender empty parent. Pre-computed by initialize_placement.py / update_placement.py."
+          },
+          "node_origin": {
+            "type": "array",
+            "items": {"type": "number"},
+            "minItems": 3,
+            "maxItems": 3,
+            "description": "Local [x, y, z] offset on the parent empty. Pre-computed by initialize_placement.py / update_placement.py."
           }
         }
       }

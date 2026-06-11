@@ -19,10 +19,10 @@ tool_scripts/
 | Kind | Style | Example |
 |------|-------|---------|
 | Modules | `snake_case` | `initialize_placement.py` |
-| Functions | `snake_case`, verb-first | `load_json_file`, `compute_node_scale` |
+| Functions | `snake_case`, verb-first | `load_json_file`, `validate_schema` |
 | Variables | `snake_case`, descriptive | `parent_world_size`, not `pW` |
 | Constants | `UPPER_SNAKE_CASE` | `REPO_ROOT`, `DEFAULT_CONFIG_PATH` |
-| Private helpers | leading `_` | `_flatten_placements_to_parts` |
+| Private helpers | leading `_` | `_rotate_scaled_center` |
 | CLI flags | `--kebab-case` | `--run-dir`, `--prev-assembly` |
 
 Avoid abbreviations (`jt`, `hs`, `pi`, `ax_idx`) and Hungarian prefixes. Use full words unless the domain term is standard (`glb`, `usd`, `json`).
@@ -49,6 +49,7 @@ if __name__ == "__main__":
 - Use `argparse`; document usage in the module docstring.
 - Resolve paths with `Path(...).expanduser().resolve()`.
 - Missing inputs: `exit_if_missing()` for CLI tools, or raise `FileNotFoundError` in library code.
+- Validate JSON inputs against `schemas/` before processing; validate outputs before finishing. On `KeyError` / `ValueError` from placement math, exit with `Error: …` so agents can fix the source file.
 - Blender scripts parse argv after `--` via `parse_blender_args()`.
 
 ## JSON and config
@@ -57,7 +58,8 @@ if __name__ == "__main__":
 - Write: `write_json_file(path, data)` (indent 2, trailing newline, UTF-8)
 - Config: `load_yaml_config()` from `configs/base.yaml`
 - Component dims: `load_dims_map(data)` or `load_dims_file(run_dir)`
-- Validation: `validate_json_file()`, `exit_if_invalid_json()`; CLI: `python3 tool_scripts/common.py --schema … --data …` (fixtures in `test_fixtures/`)
+- Validation: `validate_schema(name, path)` at script entry (calls `exit_if_invalid_json` with fix hints); CLI: `python3 tool_scripts/common.py --schema … --data …` (fixtures in `test_fixtures/`)
+- Placement math: `recompute_blender_transforms()` in `common.py` (used by `initialize_placement.py` and `update_placement.py`)
 
 ## User-facing output
 

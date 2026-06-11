@@ -11,12 +11,13 @@ from __future__ import annotations
 
 import argparse
 import math
+import sys
 from pathlib import Path
 
 import bpy  # type: ignore[import-not-found]
 from mathutils import Euler, Vector  # type: ignore[import-not-found]
 
-from common import load_dims_file, load_json_file, parse_blender_args
+from common import exit_if_missing, load_json_file, parse_blender_args, validate_schema
 
 
 def clear_scene() -> None:
@@ -33,12 +34,7 @@ def import_glb(path: Path) -> list:
     return imported
 
 
-def place_part(
-    part: dict,
-    run_dir: Path,
-    dims_map: dict[str, dict],
-    world_scales: dict[str, list[float]],
-):
+def place_part(part: dict, run_dir: Path):
     mesh_path = Path(part["visual_mesh"])
     if not mesh_path.is_absolute():
         mesh_path = (run_dir / mesh_path).resolve()
@@ -51,42 +47,9 @@ def place_part(
     for obj in imported:
         obj.parent = node
 
-    raw_dims = dims_map.get(part["name"])
-    if raw_dims is None:
-        raise KeyError(f"No dims entry for '{part['name']}' in component_dims.json")
-
-    parent_name = part.get("parent")
-    parent_world_scale = (
-        world_scales[parent_name]
-        if parent_name and parent_name in world_scales
-        else [1.0, 1.0, 1.0]
-    )
-
-    node_scale = [
-        part["world_size"][axis] / (parent_world_scale[axis] * raw_dims["size"][axis])
-        for axis in range(3)
-    ]
-    euler_deg = part["euler_deg"]
-    scaled_raw_center = [node_scale[axis] * raw_dims["center"][axis] for axis in range(3)]
-
-    if any(abs(value) > 0.01 for value in euler_deg):
-        rotation = Euler([math.radians(value) for value in euler_deg], "XYZ").to_matrix()
-        rotated_center = list(rotation @ Vector(scaled_raw_center))
-    else:
-        rotated_center = scaled_raw_center
-
-    node_origin = [
-        part["world_center"][axis] / parent_world_scale[axis] - rotated_center[axis]
-        for axis in range(3)
-    ]
-
-    node.location = Vector(node_origin)
-    node.rotation_euler = Euler([math.radians(value) for value in euler_deg], "XYZ")
-    node.scale = Vector(node_scale)
-
-    world_scales[part["name"]] = [
-        part["world_size"][axis] / raw_dims["size"][axis] for axis in range(3)
-    ]
+    node.location = Vector(part["node_origin"])
+    node.rotation_euler = Euler([math.radians(value) for value in part["euler_deg"]], "XYZ")
+    node.scale = Vector(part["node_scale"])
     return node
 
 
@@ -96,21 +59,26 @@ def main() -> None:
     parser.add_argument("--output", required=True)
     args = parse_blender_args(parser)
 
-    layout = load_json_file(args.layout)
+    layout_path = Path(args.layout).expanduser().resolve()
+    exit_if_missing(layout_path, "assembly.json")
+    validate_schema("assembly.schema.json", layout_path)
+
+    layout = load_json_file(layout_path)
     run_dir = Path(layout["root"]).expanduser().resolve()
     output_path = Path(args.output).expanduser().resolve()
 
-    dims_map = load_dims_file(run_dir)
     clear_scene()
 
-    world_scales: dict[str, list[float]] = {}
     nodes: dict[str, object] = {}
-    for part in layout["parts"]:
-        nodes[part["name"]] = place_part(part, run_dir, dims_map, world_scales)
+    try:
+        for part in layout["parts"]:
+            nodes[part["name"]] = place_part(part, run_dir)
+    except (KeyError, FileNotFoundError) as exc:
+        sys.exit(f"Error: {exc}")
 
     for part in layout["parts"]:
-        parent_name = part.get("parent")
-        if parent_name:
+        parent_name = part["parent"]
+        if parent_name is not None:
             child_node = nodes[part["name"]]
             child_node.parent = nodes[parent_name]
             child_node.matrix_parent_inverse.identity()

@@ -12,8 +12,8 @@ Skip any step whose output already exists and is valid, unless the user asks you
 to redo it.
 
 **Placement iterations are append-only.** Never delete `iterations/` dirs or redo
-analyze, components, or placement init to tweak layout — use a new iteration via
-the critic loop (see the placement human gate).
+analyze or components to tweak layout — use a new iteration via the critic loop
+(see the placement human gate).
 
 Read `configs/base.yaml` for the values you need: `loop.*`, `image_generation`,
 `placement_init`, `fal`, and `render` blocks.
@@ -26,31 +26,31 @@ the next free `NNN` (or reuse the one they name).
 1. analyze: invoke the `analyze` subagent (Task tool) with the source image
    attached, asking it to write `<run_dir>/parts.json`.
 2. Human gate (parts): show the user the parts list (names, descriptions,
-   parents, joint types) and wait for their confirmation or edits before
-   continuing. Each name must be specific and match its description; descriptions
-   must stay factual and non-exaggerated. Do not proceed on your own.
+   parents, joint types, sizes and poses) and wait for their confirmation or
+   edits before continuing. Each name must be specific and match its
+   description; descriptions must stay factual and non-exaggerated. Do not
+   proceed on your own.
 3. components: run `python3 tool_scripts/generate_components.py --run-dir <run_dir>`.
-   The script reads `configs/base.yaml` and `parts.json`, then writes `component_images/`,
-   `component_glbs/`, and `component_dims.json`. It skips existing PNGs, GLBs, and
-   dims. If fal fails (e.g. credits), report which GLBs are missing and stop; the
-   user can rerun this step later. Skip entirely if `component_dims.json` exists.
+   The script reads `configs/base.yaml` and `parts.json`, then writes
+   `component_images/`, `component_glbs/`, and `component_dims.json`. It skips
+   existing PNGs, GLBs, and dims. If fal fails (e.g. credits), report which GLBs
+   are missing and stop; the user can rerun this step later. Skip entirely if
+   `component_dims.json` exists.
 4. placement init: run `python3 tool_scripts/initialize_placement.py --run-dir <run_dir>`.
-   The script reads `configs/base.yaml`, `parts.json` (root `world_size`; per-part
-   `world_size`, `world_center`, `euler_deg`), and `component_dims.json`.
-   It writes two files:
-   - `placement_init.json` — per-part scale and Blender node offsets
-   - `iterations/001/assembly.json` — assembly copied from parts.json poses
-   If the output looks wrong, fix `parts.json` and delete both outputs to force
-   regeneration. Do not edit either file manually.
-   Skip if both outputs already exist.
+   The script reads `parts.json` and `component_dims.json`, computes Blender
+   `node_scale` and `node_origin` for every part, and writes
+   `iterations/001/assembly.json`. If placement looks wrong, fix `parts.json`
+   and delete `iterations/001/assembly.json` to regenerate. Do not edit
+   `assembly.json` manually.
+   Skip if `iterations/001/assembly.json` already exists.
 
 ## Placement/critic loop (per iteration in `iterations/NNN/`)
 
 Run iterations starting at 1. For iteration `n` (zero-padded dir, e.g. `001`):
 
 1. assembly: skip if `<run_dir>/iterations/<n>/assembly.json` already exists
-   (e.g. `iterations/001/assembly.json` from `initialize_placement.py`). Otherwise
-   run:
+   (e.g. `iterations/001/assembly.json` from `initialize_placement.py`).
+   Otherwise run:
 
    ```
    python3 tool_scripts/update_placement.py \
@@ -72,8 +72,6 @@ Run iterations starting at 1. For iteration `n` (zero-padded dir, e.g. `001`):
    `blender --background --python tool_scripts/blender_render_views.py -- --blend iterations/<n>/assembled.blend --cameras iterations/<n>/render_views.json --output-dir iterations/<n>/renders/`.
 5. critique: invoke the `critic` subagent with the source image, all rendered
    PNGs, and `iterations/<n>/assembly.json`. Write `iterations/<n>/critic.json`.
-   The assembly already contains per-part `world_size`, `world_center`, and
-   `euler_deg` in metres — pass it directly; no pre-computation step needed.
 6. exit check: track the best iteration by `score`. Stop when
    `score >= loop.score_threshold and n >= loop.min_loops`, when
    `n >= loop.max_loops`, or when the score has not improved over the best for
@@ -136,12 +134,11 @@ Report the final deliverable `<run_dir>/robot.usda` alongside the best
 ```
 .intermediate/<asset>/<NNN>/
   source.png
-  parts.json
+  parts.json                 # from analyze (step 1)
   component_dims.json
-  placement_init.json        # from initialize_placement.py (step 4)
   iterations/
     001/
-      assembly.json          # written by initialize_placement.py
+      assembly.json          # from initialize_placement.py (step 4)
       assembled.blend  renders/  critic.json
     002/
       assembly.json  assembled.blend  renders/  critic.json

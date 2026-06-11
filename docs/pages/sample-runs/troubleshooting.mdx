@@ -53,7 +53,7 @@ python3 -c "import fal_client, openai, jsonschema, yaml; print('OK')"
 ### Wrong initial pose
 
 **Symptom:** Door or drawer pose does not match the source image
-**Fix:** Edit `world_center` and `euler_deg` in `parts.json`. Delete `placement_init.json` and `iterations/001/assembly.json`, then rerun placement init:
+**Fix:** Edit `world_center` and `euler_deg` in `parts.json`. Delete `iterations/001/assembly.json`, then rerun placement init:
 
 ```bash
 python3 tool_scripts/initialize_placement.py --run-dir .intermediate/dishwasher/001
@@ -74,7 +74,7 @@ python3 tool_scripts/initialize_placement.py --run-dir .intermediate/dishwasher/
 
 ### Images don't match source style
 
-**Fix:** Verify `<run_dir>/source.png` exists — `generate_components.py` uses it as the reference image for every part.
+**Fix:** Verify `<run_dir>/source.png` exists, `generate_components.py` uses it as the reference image for every part.
 
 ---
 
@@ -83,7 +83,7 @@ python3 tool_scripts/initialize_placement.py --run-dir .intermediate/dishwasher/
 ### fal.ai timeout or credits exhausted
 
 **Symptom:** Script fails partway; some GLBs missing
-**Fix:** Top up fal.ai credits. Re-run — skips existing GLBs.
+**Fix:** Top up fal.ai credits. Re-run, skips existing GLBs.
 
 ```bash
 export FAL_KEY=...
@@ -101,7 +101,7 @@ opencode run --agent orchestrator -- "resume .intermediate/dishwasher/001/"
 ### GLB size seems wrong
 
 **Symptom:** Part appears much larger/smaller than expected
-**Note:** Raw GLB sizes vary — this is normal. `initialize_placement.py` derives `node_scale` from `world_size` and raw dims; the critic loop corrects scale via `corrected_world_size` in `critic.json`.
+**Note:** Raw GLB sizes vary, this is normal. `initialize_placement.py` derives `node_scale` from `world_size` and raw dims; the critic loop corrects scale via `corrected_world_size` in `critic.json`.
 
 ---
 
@@ -112,9 +112,9 @@ opencode run --agent orchestrator -- "resume .intermediate/dishwasher/001/"
 **Symptom:** Door 2× too wide, rack too small
 **Fix:**
 
-1. Check `placement_init.json` `node_scale` values
+1. Check `node_scale` and `world_size` in `iterations/001/assembly.json`
 2. Verify `world_size`, `world_center`, and `euler_deg` in `parts.json`
-3. Delete `placement_init.json` and rerun `initialize_placement.py`
+3. Delete `iterations/001/assembly.json` and rerun `initialize_placement.py`
 
 ### Mesh collisions (overlap)
 
@@ -127,18 +127,18 @@ opencode run --agent orchestrator -- "resume .intermediate/dishwasher/001/"
 **Fix:**
 
 1. Check `world_center` and `euler_deg` in `parts.json`
-2. Delete `placement_init.json` and `iterations/001/assembly.json`, rerun `initialize_placement.py`
+2. Delete `iterations/001/assembly.json`, rerun `initialize_placement.py`
 3. Let critic correct via `suggested_rotation_delta`
 
 ### Score plateaus below threshold
 
-**Symptom:** Score stuck at 70–75 after many iterations
+**Symptom:** Score stuck at 70-75 after many iterations
 **Fix:**
 
 1. Check if critic locks components too early
 2. Edit `parts.json` placement numbers, regenerate placement init
 3. Increase `max_loops` in `configs/base.yaml`
-4. Lower `score_threshold` if 75–80 is acceptable for your use case
+4. Lower `score_threshold` if 75-80 is acceptable for your use case
 
 ### Score regresses
 
@@ -199,8 +199,9 @@ The orchestrator auto-retries up to `max_validation_retries`. If persistent:
 
 | Error | Fix |
 |-------|-----|
-| `world_center` required | Add to non-root part in `parts.json` |
-| `euler_deg` required | Add to non-root part in `parts.json` |
+| `world_center` required | Add to the part in `parts.json` (required on every part including root) |
+| `euler_deg` required | Add to the part in `parts.json` (required on every part including root) |
+| `node_scale` / `node_origin` required | Rerun `initialize_placement.py` or `update_placement.py`: do not hand-edit |
 | `additionalProperties` | Remove unknown fields from JSON |
 | `minItems: 3` on arrays | Add missing axis: `[x, y]` → `[x, y, z]` |
 
@@ -241,7 +242,7 @@ opencode run --agent orchestrator -- "resume .intermediate/dishwasher/001/"
 ```bash
 mkdir -p .intermediate/my_object/001/component_glbs
 cp my_meshes/*.glb .intermediate/my_object/001/component_glbs/
-# Also need parts.json — write or run analyze first
+# Also need parts.json, write or run analyze first
 opencode run --agent orchestrator -- "resume .intermediate/my_object/001/"
 ```
 

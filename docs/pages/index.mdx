@@ -1,8 +1,8 @@
-<h1 className="dexter-intro-title">Dexter</h1>
+# Dexter
 
 **Dexter** (short for **dexterity**) is an agentic pipeline that turns a single product photograph into an **articulated 3D asset** ready for robotic simulation in NVIDIA Isaac Sim and similar stacks.
 
-Give it a reference image of an everyday object — a dishwasher, refrigerator, cabinet — and Dexter produces individual part meshes, a kinematic tree, joint definitions, and a USD package that simulators can load and actuate.
+Give it a reference image of an everyday object (a dishwasher, refrigerator, cabinet) and Dexter produces individual part meshes, a kinematic tree, joint definitions, and a USD package that simulators can load and actuate.
 
 ![Kitchen simulation environment](/assets/images/dexter/intro-hero.png)
 
@@ -10,13 +10,13 @@ Give it a reference image of an everyday object — a dishwasher, refrigerator, 
 
 Training robot manipulation policies requires thousands of teleoperation trajectories across many environments and object types. Simulators let you scale past the physical world, but every interactive object in a scene needs a 3D model broken into moving parts with correct joint definitions. That work is done by hand today and does not scale.
 
-Recent image-to-3D models (Hunyuan3D, SAM3D, etc.) can generate a mesh from a photo in minutes — but they output a **single solid shape** with no moving parts. A dishwasher generated this way is one fused block; you cannot open the door or pull out the rack in simulation.
+Recent image-to-3D models (Hunyuan3D, SAM3D, etc.) can generate a mesh from a photo in minutes, but they output a **single solid shape** with no moving parts. A dishwasher generated this way is one fused block; you cannot open the door or pull out the rack in simulation.
 
 Dexter targets that bottleneck: given a reference image, it produces an **articulated asset** with separate part meshes, a layout IR, joint definitions, and exportable USD (`robot.usda`).
 
 ## What Dexter produces
 
-An articulated asset is many rigid **parts** (chassis, door, rack) connected by **joints**. Motion changes joint angles or slides — not a single frozen mesh:
+An articulated asset is many rigid **parts** (chassis, door, rack) connected by **joints**. Motion changes joint angles or slides, not a single frozen mesh:
 
 ![Articulated hexapod example](/assets/images/dexter/articulated_asset_example.gif)
 
@@ -26,13 +26,13 @@ Dexter's output per run:
 
 | Deliverable | Description |
 |-------------|-------------|
-| Per-part meshes | `component_glbs/<part>.glb` — one GLB per moving part |
-| Layout IR | `assembly.json` — position, orientation, scale for each part |
-| Parts IR | `parts.json` — kinematic tree and joint types |
-| Critique IR | `critic.json` — score and per-part layout fixes |
-| USD export | `robot.usda` + `textures/` — loadable in Isaac Sim |
+| Per-part meshes | `component_glbs/<part>.glb`, one GLB per moving part |
+| Layout IR | `assembly.json`, position, orientation, and scale for each part |
+| Parts IR | `parts.json`, kinematic tree and joint types |
+| Critique IR | `critic.json`, score and per-part layout fixes |
+| USD export | `robot.usda` + `textures/`, loadable in Isaac Sim |
 
-## How it works (at a glance)
+## How it works
 
 Dexter runs through [OpenCode](https://opencode.ai), a coding agent harness. An **orchestrator** agent sequences two subagents and deterministic tool scripts, pausing at two human gates:
 
@@ -61,7 +61,7 @@ Full setup: [Requirements](/getting-started/requirements) → [Installation & Ru
 
 | Section | Contents |
 |---------|----------|
-| [Getting Started](/getting-started/requirements) | Requirements, installation & run |
+| [Getting Started](/getting-started/requirements) | Requirements, installation and run |
 | [Architecture](/architecture/overview) | Overview, agentic loop, agents, IRs, tool scripts |
 | [Sample Runs](/sample-runs/dishwasher-example) | End-to-end example with inputs, outputs, and logic |
 | [Troubleshooting](/sample-runs/troubleshooting) | Common failures and recovery |

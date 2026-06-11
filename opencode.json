@@ -25,7 +25,7 @@
       }
     },
     "analyze": {
-      "description": "Reads the source image and writes the minimal URDF parts list to parts.json.",
+      "description": "Reads the source image and writes the initial assembly layout to assembly.json.",
       "mode": "subagent",
       "temperature": 0.2,
       "prompt": "{file:./.opencode/agents/analyze.md}",

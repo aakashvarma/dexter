@@ -26,7 +26,15 @@
     "part": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "description", "parent", "joint_type"],
+      "required": [
+        "name",
+        "description",
+        "parent",
+        "joint_type",
+        "world_size",
+        "world_center",
+        "euler_deg"
+      ],
       "properties": {
         "name": {
           "type": "string",
@@ -46,30 +54,17 @@
         },
         "world_size": {
           "$ref": "#/$defs/vec3",
-          "description": "Real-world [width_m, depth_m, height_m] in metres. REQUIRED for the root part and every non-root part."
+          "description": "Real-world [width_m, depth_m, height_m] in metres. REQUIRED for every part including the root."
         },
         "world_center": {
           "$ref": "#/$defs/vec3",
-          "description": "World-space centre [x, y, z] in metres for the pose shown in the source image. REQUIRED for every non-root part. Root centre is computed by initialize_placement.py ([0, 0, height/2]). Axes: +X right, +Y back, +Z up; front face toward viewer is negative Y."
+          "description": "World-space centre [x, y, z] in metres for the pose shown in the source image. REQUIRED for every part including the root. Root typically sits on the floor at [0, 0, height/2]. Axes: +X right, +Y back, +Z up; front face toward viewer is negative Y."
         },
         "euler_deg": {
           "$ref": "#/$defs/vec3",
-          "description": "XYZ Euler rotation in degrees for the pose shown in the source image. REQUIRED for every non-root part. Use [0, 0, 0] when shut/aligned with parent."
+          "description": "XYZ Euler rotation in degrees for the pose shown in the source image. REQUIRED for every part including the root. Use [0, 0, 0] when shut/aligned."
         }
-      },
-      "allOf": [
-        {
-          "if": { "properties": { "parent": { "type": "null" } }, "required": ["parent"] },
-          "then": { "required": ["world_size"] }
-        },
-        {
-          "if": {
-            "properties": { "parent": { "type": "string" } },
-            "required": ["parent"]
-          },
-          "then": { "required": ["world_size", "world_center", "euler_deg"] }
-        }
-      ]
+      }
     }
   }
 }

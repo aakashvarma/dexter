@@ -11,15 +11,14 @@ other, plus one base part.
 
 ## World coordinate system
 
-Every non-root part needs numeric placement in **world metres** matching the
-pose shown in the source image.
+Every part needs numeric placement in **world metres** matching the pose shown
+in the source image.
 
 - **+X** — right
 - **+Y** — back (away from the viewer)
 - **+Z** — up
 - The **front** of the object faces **−Y** (toward the viewer in a front product photo)
-- The root part sits on the floor: its centre is at `[0, 0, height/2]` (computed
-  automatically — you only set `world_size` on the root)
+- The root part sits on the floor: its centre is at `[0, 0, height/2]`
 
 Use the root `world_size` as your ruler. Estimate child sizes and centres relative
 to that box.
@@ -35,8 +34,8 @@ to that box.
 | Floor centre (front) | `[0, −D/2, 0]` |
 | Top centre | `[0, 0, H]` |
 
-For a part on the front face (door, drawer): place its centre slightly **in front**
-of the parent front face — `y ≈ −D/2 + part_depth/2`.
+For a part on the front face (hinged panel, sliding drawer): place its centre
+slightly **in front** of the parent front face — `y ≈ −D/2 + part_depth/2`.
 
 ---
 
@@ -44,9 +43,9 @@ of the parent front face — `y ≈ −D/2 + part_depth/2`.
 
 ### `name`
 
-Descriptive unique snake_case name usable as a filename — e.g. `front_door`,
-`detergent_drawer`, `cabinet_body`. Avoid vague labels like `body`, `main`, or
-`part_1`.
+Descriptive unique snake_case name usable as a filename — e.g. `base_body`,
+`left_hinged_panel`, `lower_sliding_tray`. Avoid vague labels like `body`,
+`main`, or `part_1`.
 
 ### `description`
 
@@ -54,8 +53,8 @@ One short sentence identifying WHAT the part is and WHERE it sits. Used only for
 image generation — describe what to visually isolate, not numeric geometry. Do not
 repeat data already captured in `world_size`, `world_center`, or `euler_deg`.
 
-Good: "The left hinged door on the upper-left front of the cabinet."
-Bad: "The left door at world centre [−0.15, −0.28, 0.65]."
+Good: "The left hinged panel on the upper-left front of the base."
+Bad: "The left panel at world centre [−0.15, −0.28, 0.65]."
 
 ### `parent`
 
@@ -69,53 +68,57 @@ One of: `fixed`, `revolute`, `prismatic`, `continuous`, `floating`, `planar`.
 
 Real-world size in metres: `[width_m, depth_m, height_m]`.
 
-- **Root**: estimate overall object dimensions from the image and object type
-  (e.g. standard dishwasher cabinet ≈ 0.60 × 0.60 × 0.85 m).
+- **Root**: estimate overall object dimensions from the image.
 - **Non-root**: estimate each part's own dimensions. Thin panels (doors, lids):
-  depth 0.04–0.08 m. Drawers: depth close to parent depth when closed.
+  depth typically 0.04–0.08 m. Sliding members: depth close to parent depth when
+  fully retracted.
 
-**Reference examples:**
+**Reference examples** (illustrative only — measure from the image):
 
-| Part | world_size `[W, D, H]` |
-|------|------------------------|
-| Dishwasher cabinet (root) | [0.60, 0.60, 0.85] |
-| Full-width dishwasher door | [0.60, 0.04, 0.51] |
-| Fridge door (half-width) | [0.45, 0.05, 1.40] |
-| Freezer drawer | [0.90, 0.55, 0.30] |
-| Oven door | [0.60, 0.06, 0.40] |
-| Upper dish rack | [0.52, 0.50, 0.18] |
+| Part type | world_size `[W, D, H]` |
+|-----------|------------------------|
+| Root / base body | `[W, D, H]` |
+| Full-width hinged panel | `[W, 0.04–0.08, h]` |
+| Half-width hinged panel | `[W/2, 0.04–0.08, h]` |
+| Wide sliding drawer | `[0.9×W, 0.8×D, h]` |
+| Internal fixed tray | `[0.85×W, 0.8×D, h]` |
 
-### `world_center`   ← **REQUIRED for every non-root part**
+### `world_center`   ← **REQUIRED for every part**
 
-World-space centre `[x, y, z]` in metres for where the part sits **in the source
-image pose**. Estimate by comparing the part's position and size to the root box.
+World-space centre `[x, y, z]` in metres.
 
-Examples (dishwasher root `[0.60, 0.60, 0.85]`, centre `[0, 0, 0.425]`):
+- **Root**: `[0, 0, height/2]` where height is `world_size[2]`.
+- **Non-root**: where the part sits **in the source image pose**. Estimate by
+  comparing the part's position and size to the root box.
+
+Examples (root `world_size` = `[W, D, H]`, centre `[0, 0, H/2]`):
 
 | Part / pose | world_center |
 |-------------|--------------|
-| Closed front door | `[0, −0.28, 0.255]` |
-| Door open ~45° (bottom hinge) | `[0, −0.22, 0.18]` (centre shifts as it swings) |
-| Drawer pulled halfway out | `[0, −0.40, 0.12]` |
-| Upper rack inside cavity | `[0, −0.05, 0.65]` |
+| Hinged panel, closed | `[0, −D/2 + panel_depth/2, z]` |
+| Hinged panel, open ~45° | centre shifts with the swing — update both `world_center` and `euler_deg` |
+| Sliding member, partially extended | `[0, −D/2 − extension/2, z]` |
+| Internal fixed member | `[0, −D/4, z]` (inside the cavity) |
 
-### `euler_deg`   ← **REQUIRED for every non-root part**
+### `euler_deg`   ← **REQUIRED for every part**
 
 XYZ Euler rotation in **degrees** for the pose shown in the source image:
-`[rx, ry, rz]`. Use `[0, 0, 0]` when shut or aligned with the parent.
+`[rx, ry, rz]`. Root uses `[0, 0, 0]`. Non-root: use `[0, 0, 0]` when shut or
+aligned with the parent.
 
 | Part / motion | Example `euler_deg` |
 |---------------|---------------------|
 | Closed / aligned | `[0, 0, 0]` |
-| Bottom-hinged door open ~45° forward | `[−45, 0, 0]` |
-| Left-hinged door open ~90° | `[0, 0, −90]` |
-| Right-hinged door open ~90° | `[0, 0, 90]` |
+| Bottom-hinged panel open ~45° forward | `[−45, 0, 0]` |
+| Left-hinged panel open ~90° | `[0, 0, −90]` |
+| Right-hinged panel open ~90° | `[0, 0, 90]` |
 | Top-hinged lid open backward | `[45, 0, 0]` |
 
-For spin-only joints (lazy susan), use `joint_type: continuous` instead.
+For spin-only joints, use `joint_type: continuous` instead of a large `euler_deg`
+on a fixed axis.
 
-When a door swings open, both `euler_deg` **and** `world_center` must reflect the
-new pose — the centre moves with the rotation.
+When a hinged part swings open, both `euler_deg` **and** `world_center` must
+reflect the new pose — the centre moves with the rotation.
 
 ---
 
@@ -136,31 +139,33 @@ Write the result to the exact path given in the run message, conforming to
 
 ```json
 {
-  "object": "dishwasher",
+  "object": "<object_name>",
   "parts": [
     {
-      "name": "cabinet_body",
-      "description": "The main dishwasher cabinet with insulated walls and control panel on top.",
+      "name": "<root_part>",
+      "description": "<one sentence: what it is and where it sits>",
       "parent": null,
       "joint_type": "fixed",
-      "world_size": [0.60, 0.60, 0.85]
-    },
-    {
-      "name": "front_door",
-      "description": "The full-width drop-down door on the front of the cabinet.",
-      "parent": "cabinet_body",
-      "joint_type": "revolute",
-      "world_size": [0.60, 0.04, 0.51],
-      "world_center": [0, -0.28, 0.255],
+      "world_size": [<W>, <D>, <H>],
+      "world_center": [0, 0, <H/2>],
       "euler_deg": [0, 0, 0]
     },
     {
-      "name": "lower_dish_rack",
-      "description": "The lower wire dish rack inside the cabinet cavity.",
-      "parent": "cabinet_body",
-      "joint_type": "fixed",
-      "world_size": [0.52, 0.50, 0.18],
-      "world_center": [0, -0.05, 0.30],
+      "name": "<child_part_a>",
+      "description": "<one sentence: what it is and where it sits>",
+      "parent": "<root_part>",
+      "joint_type": "revolute",
+      "world_size": [<W>, <D>, <H>],
+      "world_center": [<x>, <y>, <z>],
+      "euler_deg": [<rx>, <ry>, <rz>]
+    },
+    {
+      "name": "<child_part_b>",
+      "description": "<one sentence: what it is and where it sits>",
+      "parent": "<root_part>",
+      "joint_type": "prismatic",
+      "world_size": [<W>, <D>, <H>],
+      "world_center": [<x>, <y>, <z>],
       "euler_deg": [0, 0, 0]
     }
   ]

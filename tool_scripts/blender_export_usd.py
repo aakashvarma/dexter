@@ -17,7 +17,7 @@ from pathlib import Path
 
 import bpy  # type: ignore[import-not-found]
 
-from common import parse_blender_args
+from common import exit_if_missing, parse_blender_args
 
 
 def sanitize_usd_name(name: str) -> str:
@@ -63,6 +63,7 @@ def main() -> None:
 
     blend_path = Path(args.blend).expanduser().resolve()
     output_path = Path(args.output).expanduser().resolve()
+    exit_if_missing(blend_path, "assembled.blend")
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     bpy.ops.wm.open_mainfile(filepath=str(blend_path))

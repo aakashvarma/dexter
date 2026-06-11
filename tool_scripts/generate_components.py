@@ -21,7 +21,7 @@ import fal_client
 import requests
 from openai import OpenAI
 
-from common import exit_if_missing, load_json_file, load_yaml_config
+from common import exit_if_missing, load_json_file, load_yaml_config, validate_schema
 
 
 def parse_args() -> argparse.Namespace:
@@ -86,8 +86,8 @@ def build_prompt(
     )
 
 
-def build_prompts(parts: dict, background: str) -> list[dict]:
-    part_entries = parts["parts"]
+def build_prompts(parts_data: dict, background: str) -> list[dict]:
+    part_entries = parts_data["parts"]
     all_part_names = [format_snake_case_name(part["name"]) for part in part_entries]
     prompts: list[dict] = []
     for part in part_entries:
@@ -108,8 +108,6 @@ def generate_images(paths: dict, prompts: list[dict]) -> None:
     images_dir.mkdir(parents=True, exist_ok=True)
 
     reference_image = paths["reference_image"]
-    if not reference_image.exists():
-        raise FileNotFoundError(f"reference image not found: {reference_image}")
 
     client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
@@ -138,7 +136,7 @@ def generate_images(paths: dict, prompts: list[dict]) -> None:
 
 def generate_glbs(paths: dict) -> None:
     if "FAL_KEY" not in os.environ:
-        raise OSError("Set FAL_KEY in your environment before running.")
+        sys.exit("Error: set FAL_KEY in your environment before running.")
 
     glbs_dir = paths["glbs_dir"]
     glbs_dir.mkdir(parents=True, exist_ok=True)
@@ -198,15 +196,21 @@ def generate_components(run_dir: str | Path) -> None:
     paths = build_run_paths(run_dir, config)
 
     exit_if_missing(paths["parts_path"], "parts.json")
-    parts = load_json_file(paths["parts_path"])
-    prompts = build_prompts(parts, paths["background_instruction"])
+    exit_if_missing(paths["reference_image"], "source.png")
+    validate_schema("parts.schema.json", paths["parts_path"])
+
+    parts_data = load_json_file(paths["parts_path"])
+    prompts = build_prompts(parts_data, paths["background_instruction"])
 
     if "OPENAI_API_KEY" not in os.environ:
-        raise OSError("Set OPENAI_API_KEY in your environment before running.")
+        sys.exit("Error: set OPENAI_API_KEY in your environment before running.")
 
     generate_images(paths, prompts)
     generate_glbs(paths)
     measure_glbs(paths)
+
+    if paths["dims_path"].is_file():
+        validate_schema("component_dims.schema.json", paths["dims_path"])
 
 
 def main() -> None:

@@ -1,6 +1,6 @@
 # Architecture Overview
 
-Dexter turns one product photo into an articulated 3D asset — separate meshes for each moving part, arranged in the right poses, exported as USD for simulators like NVIDIA Isaac Sim.
+Dexter turns one product photo into an articulated 3D asset with separate meshes for each moving part, arranged in the right poses, and exported as USD for simulators like NVIDIA Isaac Sim.
 
 You do not run a long shell script or click through a GUI wizard. You talk to an **orchestrator agent** in OpenCode. It reads your image, calls specialist agents when judgment is needed, runs Python and Blender scripts for everything else, and pauses twice so you can review the result before expensive steps continue.
 
@@ -10,13 +10,13 @@ This page explains the flow at a high level. For field-level detail on agents, J
 
 ## What you start with
 
-You give Dexter a single reference photo — a dishwasher, refrigerator, cabinet, or similar everyday object. The photo should show the object clearly, ideally with articulation visible (a door open, a drawer pulled out).
+You give Dexter a single reference photo of a dishwasher, refrigerator, cabinet, or similar everyday object. The photo should show the object clearly, ideally with articulation visible (a door open, a drawer pulled out).
 
 ![Dishwasher input photo](/assets/images/dexter/dishwasher_input.png)
 
 *A typical input: one product photo with visible moving parts.*
 
-The orchestrator copies this image into a run folder (`.intermediate/<asset>/<NNN>/source.png`) and works from there. Everything the pipeline produces — JSON files, meshes, renders, blends — accumulates in that folder.
+The orchestrator copies this image into a run folder (`.intermediate/<asset>/<NNN>/source.png`) and works from there. Everything the pipeline produces, JSON files, meshes, renders, blends, accumulates in that folder.
 
 ---
 
@@ -35,23 +35,23 @@ Dexter splits work between **agents** (LLM judgment) and **tool scripts** (deter
 | **critic subagent** | Compares rendered views to the photo and writes layout fixes (`critic.json`) |
 | **Tool scripts** | Generate images and meshes, place parts in Blender, render views, export USD |
 
-Subagents never talk to each other. The orchestrator passes files between them. There is no standalone Python pipeline driver — the orchestrator prompt is the entrypoint.
+Subagents never talk to each other. The orchestrator passes files between them. There is no standalone Python pipeline driver; the orchestrator prompt is the entrypoint.
 
 ---
 
 ## The flow, step by step
 
-### 1. Name the parts
+### Name the parts
 
 The **analyze** subagent studies `source.png` and breaks the object into moving parts: a cabinet body, a door, racks, drawers, and so on. For each part it records a name, a short description, how it connects to its parent, and a joint type (fixed, revolute, prismatic).
 
-It also writes initial size and pose numbers — how big each part is in metres and where it sits in the photo. All of this lands in `parts.json`.
+It also writes initial size and pose numbers, how big each part is in metres and where it sits in the photo. All of this lands in `parts.json`.
 
-### 2. You review the part list
+### Review the part list
 
 Before any 3D APIs are called, the orchestrator stops and shows you `parts.json`. This is the first **human gate**. You confirm that part names make sense, descriptions are accurate, and joint types match what you see in the photo. If something is wrong, you edit or ask for changes before continuing.
 
-### 3. Build a mesh for each part
+### Build a mesh for each part
 
 Once you approve the parts, `generate_components.py` runs. For every part it:
 
@@ -63,22 +63,22 @@ The outputs are `component_images/`, `component_glbs/`, and `component_dims.json
 
 ![Component part renders](/assets/images/dexter/part_renders.png)
 
-*Isolated part images feed image-to-3D models — one mesh per moving part.*
+*Isolated part images feed image-to-3D models, one mesh per moving part.*
 
-### 4. Place parts in the scene
+### Place parts in the scene
 
-`initialize_placement.py` combines the sizes from `parts.json` with the raw mesh measurements to build the first layout: `iterations/001/assembly.json`. This file says where every part sits in 3D space — position, rotation, and scale in metres.
+`initialize_placement.py` combines world-space poses from `parts.json` with raw mesh measurements from `component_dims.json` to build the first layout: `iterations/001/assembly.json`. Each part stores world position, rotation, and size in metres, plus pre-computed Blender `node_scale` and `node_origin`.
 
-No LLM is involved here. It is pure geometry math.
+No LLM is involved here. It is pure geometry math. `blender_assemble.py` applies those transforms directly.
 
-### 5. Render, score, and refine
+### Render, score, and refine
 
 Now the **placement ↔ critic loop** begins. Each round lives in `iterations/NNN/`:
 
-1. **Assemble** — Blender loads the GLBs and builds a scene (`assembled.blend`)
-2. **Render** — four views are captured: front, top, left, isometric
-3. **Critique** — the critic subagent compares the renders to your source photo and scores the layout
-4. **Update** — if the loop continues, corrections are applied to the next `assembly.json`
+1. **Assemble**: Blender loads the GLBs and builds a scene (`assembled.blend`)
+2. **Render**: four views are captured: front, top, left, isometric
+3. **Critique**: the critic subagent compares the renders to your source photo and scores the layout
+4. **Update**: if the loop continues, corrections are applied to the next `assembly.json`
 
 The critic might say a door angle is too shallow, a rack is shifted left, or a part is the wrong size. Locked parts are left alone. The orchestrator keeps the **best-scoring** iteration even if a later round regresses.
 
@@ -92,11 +92,11 @@ The critic might say a door angle is too shallow, a rack is shifted left, or a p
 | Max iterations reached | Hard cap (default: 5 rounds) |
 | Score stops improving | No progress for several rounds in a row |
 
-### 6. You approve the layout
+### Approve the layout
 
 When the loop ends, the orchestrator pauses at the second **human gate**. You review renders from the best iteration, the critic score, and the assembled Blender file. Approve it, pick a different iteration, or ask for more refinement through another critic round.
 
-### 7. Export for simulation
+### Export for simulation
 
 After you approve, `blender_export_usd.py` writes the final package: `robot.usda`, extracted `textures/`, and a `robot_prim_map.json` that maps Blender object names to USD prim paths. This is what you load in Isaac Sim or similar tools.
 
@@ -108,17 +108,17 @@ After you approve, `blender_export_usd.py` writes the final package: `robot.usda
 
 ## What an articulated asset means
 
-A dishwasher is not one solid block. It is a **chassis** plus a **door** on a hinge plus **racks** that slide. Each piece is a separate rigid mesh connected by joints. In simulation you change joint angles — open the door, pull out a rack — instead of deforming a single frozen shape.
+A dishwasher is not one solid block. It is a **chassis** plus a **door** on a hinge plus **racks** that slide. Each piece is a separate rigid mesh connected by joints. In simulation you change joint angles, open the door, pull out a rack, instead of deforming a single frozen shape.
 
 ![Articulated asset example](/assets/images/dexter/articulated_asset_example.gif)
 
-*Articulation means independent rigid parts connected by joints — not one fused mesh.*
+*Articulation means independent rigid parts connected by joints, not one fused mesh.*
 
 | Deliverable | What it is |
 |-------------|------------|
 | `component_glbs/<part>.glb` | One 3D mesh per moving part |
-| `parts.json` | Kinematic tree — which parts exist and how they connect |
-| `assembly.json` | Layout — where each part sits in 3D space |
+| `parts.json` | Kinematic tree, which parts exist and how they connect |
+| `assembly.json` | Layout, world-space pose plus Blender `node_scale` / `node_origin` per part |
 | `critic.json` | Score and per-part corrections from each critique round |
 | `robot.usda` + `textures/` | Final USD package for simulators |
 
@@ -126,7 +126,7 @@ A dishwasher is not one solid block. It is a **chassis** plus a **door** on a hi
 
 ## Where everything lives on disk
 
-Each run writes to `.intermediate/<asset>/<NNN>/`. The orchestrator checks this folder before every step and skips work whose outputs already exist — so you can resume after a pause or interruption.
+Each run writes to `.intermediate/<asset>/<NNN>/`. The orchestrator checks this folder before every step and skips work whose outputs already exist, so you can resume after a pause or interruption.
 
 ![Intermediate directory layout](/assets/images/dexter/intermediate-directory.png)
 
@@ -139,17 +139,17 @@ Each run writes to `.intermediate/<asset>/<NNN>/`. The orchestrator checks this 
 | Stage | Who | Output |
 |-------|-----|--------|
 | Part identification | analyze subagent | `parts.json` |
-| Human review | You | — |
+| Human review | You |, |
 | 3D component generation | `generate_components.py` | PNGs, GLBs, dims |
 | Initial placement | `initialize_placement.py` | `iterations/001/assembly.json` |
 | Refinement loop | Blender scripts + critic subagent | renders, `critic.json`, updated assemblies |
-| Human review | You | — |
+| Human review | You |, |
 | USD export | `blender_export_usd.py` | `robot.usda` |
 
-Dexter does not run inside a simulator. It is the step **before** simulation — turning a photo into something a simulator can load and actuate.
+Dexter does not run inside a simulator. It is the step **before** simulation, turning a photo into something a simulator can load and actuate.
 
 ---
 
-**Next:** [Agentic Loop](/architecture/agentic-loop) — agents, intermediate representations, tool scripts, and schemas in full detail.
+**Next:** [Agentic Loop](/architecture/agentic-loop), agents, intermediate representations, tool scripts, and schemas in full detail.
 
 **Example run:** [Sample Run: Dishwasher](/sample-runs/dishwasher-example) · **Get started:** [Installation & Run](/getting-started/installation)

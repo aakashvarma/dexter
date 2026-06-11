@@ -22,7 +22,7 @@ const config: DocsThemeConfig = {
   },
   useNextSeoProps() {
     return {
-      titleTemplate: '%s – Dexter'
+      titleTemplate: '%s - Dexter'
     }
   },
 }
