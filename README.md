@@ -1,5 +1,10 @@
 # Dexter — Articulated Asset Agent System
 
+[![Release](https://img.shields.io/github/v/release/aakashvarma/dexter?label=release)](https://github.com/aakashvarma/dexter/releases)
+[![License](https://img.shields.io/github/license/aakashvarma/dexter)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](docs/pages/getting-started/requirements.mdx)
+[![Docs](https://img.shields.io/badge/docs-Nextra-000)](docs/README.md)
+
 **Dexter** turns a single product photograph into an **articulated 3D asset** — separate part meshes, a kinematic tree, and a USD package loadable in [NVIDIA Isaac Sim](https://developer.nvidia.com/isaac/sim).
 
 An OpenCode **orchestrator** agent drives the pipeline. Output lands in `.intermediate/<asset>/<NNN>/`; the final deliverable is `robot.usda`.
@@ -167,4 +172,4 @@ Dexter is built for extension — new subagents, tool scripts, schemas, and plac
 
 Pipeline config: [`configs/base.yaml`](configs/base.yaml). Agent definitions: [`opencode.json`](opencode.json), prompts in [`.opencode/agents/`](.opencode/agents/). Agent and orchestrator behavior is also summarized in [`AGENTS.md`](AGENTS.md).
 
-Pull requests and issues welcome.
+Pull requests and issues welcome. See [CONTRIBUTING.md](CONTRIBUTING.md), [CHANGELOG.md](CHANGELOG.md), and [SECURITY.md](SECURITY.md).

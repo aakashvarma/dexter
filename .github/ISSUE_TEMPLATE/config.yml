@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/aakashvarma/dexter/tree/main/docs
+    about: Setup, architecture, sample runs, and troubleshooting guides
+  - name: Sample outputs (no install)
+    url: https://huggingface.co/datasets/varmology/dexter-sample-outputs
+    about: Download real pipeline artifacts to inspect without running Dexter

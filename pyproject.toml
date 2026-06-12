@@ -1,3 +1,37 @@
+[project]
+name = "dexter"
+version = "0.0.0"
+description = "Agentic pipeline: product photo → articulated 3D asset (USD) for robotic simulation"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.10"
+authors = [{ name = "Aakash Varma" }]
+keywords = ["robotics", "simulation", "usd", "3d", "agents", "isaac-sim", "articulated-assets"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "fal_client",
+    "openai",
+    "requests",
+    "jsonschema",
+    "pyyaml",
+]
+
+[project.urls]
+Homepage = "https://github.com/aakashvarma/dexter"
+Documentation = "https://github.com/aakashvarma/dexter/tree/main/docs"
+Repository = "https://github.com/aakashvarma/dexter"
+Issues = "https://github.com/aakashvarma/dexter/issues"
+Changelog = "https://github.com/aakashvarma/dexter/blob/main/CHANGELOG.md"
+
 [tool.ruff]
 target-version = "py311"
 line-length = 100

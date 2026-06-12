@@ -1,0 +1,45 @@
+name: Bug report
+description: Something failed or produced incorrect output
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Check [troubleshooting](https://github.com/aakashvarma/dexter/blob/main/docs/pages/sample-runs/troubleshooting.mdx) first if applicable.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the bug and what you expected instead.
+      placeholder: The critic loop stopped after iteration 2 with a schema validation error...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Command, prompt, or run directory you used.
+      placeholder: |
+        opencode run --agent orchestrator -- "build the dishwasher from input_images/dishwasher.png"
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python, Blender, and OpenCode versions.
+      placeholder: |
+        macOS 15, Python 3.11, Blender 4.2, OpenCode 0.x
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or artifacts
+      description: Relevant terminal output, `critic.json`, or path under `.intermediate/`.
+      render: shell
