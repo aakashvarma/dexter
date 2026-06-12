@@ -3,8 +3,8 @@
 Run::
 
     blender --background --python blender_export_usd.py -- \\
-        --blend ../.intermediate/dishwasher/001/iterations/006/assembled.blend \\
-        --output ../.intermediate/dishwasher/001/robot.usda
+        --blend <run_dir>/iterations/006/assembled.blend \\
+        --output <run_dir>/robot.usda
 """
 
 from __future__ import annotations

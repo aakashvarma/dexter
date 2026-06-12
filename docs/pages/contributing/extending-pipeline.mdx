@@ -41,7 +41,8 @@ Follow existing conventions:
       "temperature": 0.2,
       "prompt": "{file:./.opencode/agents/<name>.md}",
       "permission": {
-        "edit": {"*": "deny", ".intermediate/**": "allow"},
+        "edit": {"*": "allow", "tool_scripts/**": "deny", "configs/**": "deny"},
+        "external_directory": {"*": "allow"},
         "bash": {"*": "deny", "*common.py*": "allow"},
         "read": "allow",
         "glob": "allow",

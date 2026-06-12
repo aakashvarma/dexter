@@ -3,8 +3,8 @@
 Run::
 
     blender --background --python blender_measure_glbs.py -- \\
-        --glbs-dir ../.intermediate/dishwasher/001/component_glbs \\
-        --output ../.intermediate/dishwasher/001/component_dims.json
+        --glbs-dir <run_dir>/component_glbs \\
+        --output <run_dir>/component_dims.json
 """
 
 from __future__ import annotations

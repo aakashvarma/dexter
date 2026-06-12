@@ -4,12 +4,12 @@
 
 - The runnable entrypoint is the OpenCode `orchestrator` agent (`opencode.json` -> `.opencode/agents/orchestrator.md`); there is no standalone Python pipeline driver.
 - Trust executable/config files over prose: `opencode.json`, `.opencode/agents/*.md`, `configs/base.yaml`, `tool_scripts/`, and `schemas/`.
-- Pipeline output lives in gitignored `.intermediate/<asset>/<NNN>/`; always list/read that run dir before resuming, and skip valid existing artifacts unless the user asks to redo them.
+- Pipeline output lives under `paths.intermediate_root` from `configs/base.yaml` (default `.intermediate/<asset>/<NNN>/`); always list/read that run dir before resuming, and skip valid existing artifacts unless the user asks to redo them.
 
 ## Setup and commands
 
 - Setup: `pip install -r requirements.txt`; full pipeline runs also need authenticated `opencode`, `OPENAI_API_KEY` for component PNGs, `FAL_KEY` for fal.ai GLBs, and `blender` on `PATH` (or change `paths.blender_binary` in `configs/base.yaml`).
-- Start a run through OpenCode, e.g. `opencode run --agent orchestrator -- "build the dishwasher from input_images/dishwasher.png"`; to resume, point the prompt at `.intermediate/<asset>/<NNN>/`.
+- Start a run through OpenCode, e.g. `opencode run --agent orchestrator -- "build the dishwasher from input_images/dishwasher.png"`; to resume, point the prompt at `<intermediate_root>/<asset>/<NNN>/` from `configs/base.yaml`.
 - There is no checked-in test runner or CI beyond `requirements.txt`; focused verification is JSON-schema validation (`python tool_scripts/common.py --schema schemas/<name>.schema.json --data <path>`) and `ruff check tool_scripts/` / `ruff format tool_scripts/` (see `docs/pages/contributing/tool-script-standards.mdx`).
 - Blender scripts require args after `--`, e.g. `blender --background --python tool_scripts/blender_assemble.py -- --layout <assembly.json> --output <assembled.blend>`.
 

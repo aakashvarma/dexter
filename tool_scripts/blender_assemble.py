@@ -3,8 +3,8 @@
 Run::
 
     blender --background --python blender_assemble.py -- \\
-        --layout ../.intermediate/dishwasher/001/iterations/006/assembly.json \\
-        --output ../.intermediate/dishwasher/001/iterations/006/assembled.blend
+        --layout <run_dir>/iterations/006/assembly.json \\
+        --output <run_dir>/iterations/006/assembled.blend
 """
 
 from __future__ import annotations

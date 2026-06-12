@@ -7,7 +7,24 @@
       "temperature": 0.2,
       "prompt": "{file:./.opencode/agents/orchestrator.md}",
       "permission": {
-        "edit": {"*": "deny", ".intermediate/**": "allow"},
+        "edit": {
+          "*": "allow",
+          ".opencode/**": "deny",
+          "tool_scripts/**": "deny",
+          "schemas/**": "deny",
+          "configs/**": "deny",
+          "docs/**": "deny",
+          "input_images/**": "deny",
+          "opencode.json": "deny",
+          "AGENTS.md": "deny",
+          "README.md": "deny",
+          "requirements.txt": "deny",
+          "pyproject.toml": "deny",
+          ".gitignore": "deny"
+        },
+        "external_directory": {
+          "*": "allow"
+        },
         "bash": {
           "*": "deny",
           "python *": "allow",
@@ -30,7 +47,24 @@
       "temperature": 0.2,
       "prompt": "{file:./.opencode/agents/analyze.md}",
       "permission": {
-        "edit": {"*": "deny", ".intermediate/**": "allow"},
+        "edit": {
+          "*": "allow",
+          ".opencode/**": "deny",
+          "tool_scripts/**": "deny",
+          "schemas/**": "deny",
+          "configs/**": "deny",
+          "docs/**": "deny",
+          "input_images/**": "deny",
+          "opencode.json": "deny",
+          "AGENTS.md": "deny",
+          "README.md": "deny",
+          "requirements.txt": "deny",
+          "pyproject.toml": "deny",
+          ".gitignore": "deny"
+        },
+        "external_directory": {
+          "*": "allow"
+        },
         "bash": {"*": "deny", "*common.py*": "allow"},
         "read": "allow",
         "glob": "allow",
@@ -46,7 +80,24 @@
       "temperature": 0.2,
       "prompt": "{file:./.opencode/agents/critic.md}",
       "permission": {
-        "edit": {"*": "deny", ".intermediate/**": "allow"},
+        "edit": {
+          "*": "allow",
+          ".opencode/**": "deny",
+          "tool_scripts/**": "deny",
+          "schemas/**": "deny",
+          "configs/**": "deny",
+          "docs/**": "deny",
+          "input_images/**": "deny",
+          "opencode.json": "deny",
+          "AGENTS.md": "deny",
+          "README.md": "deny",
+          "requirements.txt": "deny",
+          "pyproject.toml": "deny",
+          ".gitignore": "deny"
+        },
+        "external_directory": {
+          "*": "allow"
+        },
         "bash": {"*": "deny", "*common.py*": "allow"},
         "read": "allow",
         "glob": "allow",

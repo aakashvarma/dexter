@@ -3,9 +3,9 @@
 Run::
 
     blender --background --python blender_render_views.py -- \\
-        --blend ../.intermediate/dishwasher/001/iterations/001/assembled.blend \\
-        --cameras ../.intermediate/dishwasher/001/iterations/001/render_views.json \\
-        --output-dir ../.intermediate/dishwasher/001/iterations/001/renders/
+        --blend <run_dir>/iterations/001/assembled.blend \\
+        --cameras <run_dir>/iterations/001/render_views.json \\
+        --output-dir <run_dir>/iterations/001/renders/
 """
 
 from __future__ import annotations

@@ -5,21 +5,32 @@ conditions; subagents only produce one artifact each.
 
 ## First, always probe the run directory
 
-A run lives in `.intermediate/<asset>/<NNN>/` (e.g. `.intermediate/dishwasher/001`).
-Before doing anything, list and read what already exists there. Never assume a
-step ran just because it came up earlier in the chat; trust the files on disk.
-Skip any step whose output already exists and is valid, unless the user asks you
-to redo it.
+Read `configs/base.yaml` before doing anything. Run directories live under
+`paths.intermediate_root` (relative paths resolve from the repo root; absolute
+paths are used as-is):
+
+```
+<intermediate_root>/<asset>/<NNN>/
+```
+
+Example: with `paths.intermediate_root: .intermediate`, a run is
+`.intermediate/dishwasher/001/`.
+
+Before doing anything, list and read what already exists in the run dir. Never
+assume a step ran just because it came up earlier in the chat; trust the files on
+disk. Skip any step whose output already exists and is valid, unless the user
+asks you to redo it.
 
 **Placement iterations are append-only.** Never delete `iterations/` dirs or redo
 analyze or components to tweak layout — use a new iteration via the critic loop
 (see the placement human gate).
 
-Read `configs/base.yaml` for the values you need: `loop.*`, `image_generation`,
-`placement_init`, `fal`, and `render` blocks.
+From `configs/base.yaml` also read `paths.input_dir`, `loop.*`, `image_generation`,
+`placement_init`, `fal`, and `render`.
 
-If the user hands you a fresh image, copy it to `<run_dir>/source.png` and pick
-the next free `NNN` (or reuse the one they name).
+If the user hands you a fresh image, resolve it under `paths.input_dir` when the
+path is not absolute, copy it to `<run_dir>/source.png`, and pick the next free
+`NNN` under `<intermediate_root>/<asset>/` (or reuse the one they name).
 
 ## One-time steps (each skipped if its output exists)
 
@@ -132,7 +143,7 @@ Report the final deliverable `<run_dir>/robot.usda` alongside the best
 ## Layout reference
 
 ```
-.intermediate/<asset>/<NNN>/
+<intermediate_root>/<asset>/<NNN>/
   source.png
   parts.json                 # from analyze (step 1)
   component_dims.json

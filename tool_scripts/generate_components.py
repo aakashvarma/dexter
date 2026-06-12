@@ -4,7 +4,7 @@ Run::
 
     export OPENAI_API_KEY=your_key_here
     export FAL_KEY=your_key_here
-    python3 tool_scripts/generate_components.py --run-dir ../.intermediate/dishwasher/001
+    python3 tool_scripts/generate_components.py --run-dir <run_dir>
 """
 
 from __future__ import annotations

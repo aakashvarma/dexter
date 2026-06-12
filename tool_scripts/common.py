@@ -3,7 +3,7 @@
 Validate JSON from the command line::
 
     python3 tool_scripts/common.py --schema schemas/assembly.schema.json \\
-        --data .intermediate/dishwasher/001/iterations/001/assembly.json
+        --data <run_dir>/iterations/001/assembly.json
 """
 
 from __future__ import annotations
@@ -20,6 +20,14 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = REPO_ROOT / "configs" / "base.yaml"
+
+
+def resolve_config_path(path_str: str, *, repo_root: Path | None = None) -> Path:
+    """Resolve a config path relative to the repo root, or as an absolute path."""
+    path = Path(path_str).expanduser()
+    if path.is_absolute():
+        return path.resolve()
+    return (repo_root or REPO_ROOT) / path
 
 
 def load_json_file(path: Path | str) -> Any:
