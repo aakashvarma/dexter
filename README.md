@@ -48,3 +48,19 @@ Interactive TUI: run `opencode`, press **Tab** to select the **orchestrator** ag
 | Contributing | [Developer Guide](docs/pages/contributing/overview.mdx) |
 
 Pipeline config: [`configs/base.yaml`](configs/base.yaml). Agent definitions: [`opencode.json`](opencode.json), prompts in [`.opencode/agents/`](.opencode/agents/).
+
+## Objects Dexter has articulated
+
+From a single product photo each, Dexter has generated full articulated 3D assets — per-part GLBs, an assembly layout, and USD export — for these household appliances:
+
+| Dishwasher | Refrigerator |
+|:---:|:---:|
+| ![Dishwasher](docs/public/assets/images/dexter/examples/dishwasher.png) | ![Refrigerator](docs/public/assets/images/dexter/examples/refrigerator.png) |
+| Door and dish racks as separate moving parts | French doors and freezer drawer |
+
+| Washing machine | Oven |
+|:---:|:---:|
+| ![Washing machine](docs/public/assets/images/dexter/examples/washingmachine.png) | ![Oven](docs/public/assets/images/dexter/examples/oven.png) |
+| Front-load door and cabinet | Drop-down oven door and cooktop |
+
+Bundled inputs live in [`input_images/`](input_images/). See the [dishwasher sample run](docs/pages/sample-runs/dishwasher-example.mdx) for a full end-to-end walkthrough.
