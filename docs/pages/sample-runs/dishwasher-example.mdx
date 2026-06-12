@@ -2,6 +2,8 @@
 
 This page follows one run from `input_images/dishwasher.png` to `.intermediate/dishwasher/001/`. Steps appear in the order the orchestrator runs them. For how to start or resume, see [Installation & Run](/getting-started/installation).
 
+Download the real run artifacts (and outputs for other example assets) from [varmology/dexter-sample-outputs](https://huggingface.co/datasets/varmology/dexter-sample-outputs) on Hugging Face — useful if you want to verify outputs without running the full pipeline.
+
 ```mermaid
 flowchart TD
     analyze["analyze\n→ parts.json"] --> gate1{"Human gate:\nparts review"}
