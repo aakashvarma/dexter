@@ -178,6 +178,7 @@ def measure_glbs(paths: dict) -> None:
     subprocess.run(
         [
             paths["blender_binary"],
+            "--python-use-system-env",
             "--background",
             "--python",
             str(script_path),

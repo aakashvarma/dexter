@@ -20,7 +20,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tool_scripts/blender_*.py" = ["F401"]  # bpy only exists inside Blender
+"tool_scripts/blender_*.py" = ["E402", "F401"]  # path bootstrap before bpy/common; bpy only in Blender
 
 [tool.ruff.lint.isort]
 known-first-party = ["common"]

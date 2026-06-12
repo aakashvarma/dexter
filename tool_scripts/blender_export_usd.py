@@ -15,6 +15,10 @@ import re
 import sys
 from pathlib import Path
 
+_TOOL_SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(_TOOL_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_TOOL_SCRIPTS_DIR))
+
 import bpy  # type: ignore[import-not-found]
 
 from common import exit_if_missing, parse_blender_args

@@ -15,9 +15,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import jsonschema
-import yaml
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = REPO_ROOT / "configs" / "base.yaml"
 
@@ -40,6 +37,8 @@ def write_json_file(path: Path, data: Any) -> None:
 
 
 def load_yaml_config(path: Path | None = None) -> dict[str, Any]:
+    import yaml
+
     config_path = path or DEFAULT_CONFIG_PATH
     return yaml.safe_load(config_path.read_text(encoding="utf-8"))
 
@@ -143,6 +142,8 @@ def parse_blender_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
 
 
 def collect_schema_errors(schema: dict, data: object) -> list[str]:
+    import jsonschema
+
     validator = jsonschema.Draft202012Validator(schema)
     errors = sorted(validator.iter_errors(data), key=lambda error: list(error.path))
     return [

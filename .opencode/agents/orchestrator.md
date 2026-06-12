@@ -74,13 +74,13 @@ Run iterations starting at 1. For iteration `n` (zero-padded dir, e.g. `001`):
    of the most recent one.
 
 2. assemble: run
-   `blender --background --python tool_scripts/blender_assemble.py -- --layout iterations/<n>/assembly.json --output iterations/<n>/assembled.blend`.
+   `blender --python-use-system-env --background --python tool_scripts/blender_assemble.py -- --layout iterations/<n>/assembly.json --output iterations/<n>/assembled.blend`.
 3. render views: write `iterations/<n>/render_views.json` (four cameras per
    `schemas/render_views.schema.json`; use `render` defaults from configs/base.yaml), then
    validate:
    `python3 tool_scripts/common.py --schema schemas/render_views.schema.json --data iterations/<n>/render_views.json`.
 4. render: run
-   `blender --background --python tool_scripts/blender_render_views.py -- --blend iterations/<n>/assembled.blend --cameras iterations/<n>/render_views.json --output-dir iterations/<n>/renders/`.
+   `blender --python-use-system-env --background --python tool_scripts/blender_render_views.py -- --blend iterations/<n>/assembled.blend --cameras iterations/<n>/render_views.json --output-dir iterations/<n>/renders/`.
 5. critique: invoke the `critic` subagent with the source image, all rendered
    PNGs, and `iterations/<n>/assembly.json`. Write `iterations/<n>/critic.json`.
 6. exit check: track the best iteration by `score`. Stop when
@@ -126,7 +126,7 @@ until the user has approved a layout in the gate above. Read
 Run:
 
 ```
-blender --background --python tool_scripts/blender_export_usd.py -- \
+blender --python-use-system-env --background --python tool_scripts/blender_export_usd.py -- \
     --blend <run_dir>/iterations/<B>/assembled.blend \
     --output <run_dir>/robot.usda \
     --root-prim-path <usd.root_prim_path>

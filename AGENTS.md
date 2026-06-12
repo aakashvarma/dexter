@@ -11,7 +11,7 @@
 - Setup: `pip install -r requirements.txt`; full pipeline runs also need authenticated `opencode`, `OPENAI_API_KEY` for component PNGs, `FAL_KEY` for fal.ai GLBs, and `blender` on `PATH` (or change `paths.blender_binary` in `configs/base.yaml`).
 - Start a run through OpenCode, e.g. `opencode run --agent orchestrator -- "build the dishwasher from input_images/dishwasher.png"`; to resume, point the prompt at `<intermediate_root>/<asset>/<NNN>/` from `configs/base.yaml`.
 - There is no checked-in test runner or CI beyond `requirements.txt`; focused verification is JSON-schema validation (`python tool_scripts/common.py --schema schemas/<name>.schema.json --data <path>`) and `ruff check tool_scripts/` / `ruff format tool_scripts/` (see `docs/pages/contributing/tool-script-standards.mdx`).
-- Blender scripts require args after `--`, e.g. `blender --background --python tool_scripts/blender_assemble.py -- --layout <assembly.json> --output <assembled.blend>`.
+- Blender scripts require `--python-use-system-env` (for `jsonschema`/`pyyaml` from your pip env) and args after `--`, e.g. `blender --python-use-system-env --background --python tool_scripts/blender_assemble.py -- --layout <assembly.json> --output <assembled.blend>`.
 
 ## Pipeline order and gates
 
