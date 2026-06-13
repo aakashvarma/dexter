@@ -128,9 +128,38 @@ A dishwasher is not one solid block. It is a **chassis** plus a **door** on a hi
 
 Each run writes to `.intermediate/<asset>/<NNN>/`. The orchestrator checks this folder before every step and skips work whose outputs already exist, so you can resume after a pause or interruption.
 
-![Intermediate directory layout](/assets/images/dexter/intermediate-directory.png)
+```
+.intermediate/dishwasher/001/
+├── source.png
+├── parts.json
+├── component_dims.json
+├── component_images/
+│   ├── body.png
+│   ├── front_door.png
+│   ├── lower_rack.png
+│   └── upper_rack.png
+├── component_glbs/
+│   ├── body.glb
+│   ├── front_door.glb
+│   ├── lower_rack.glb
+│   └── upper_rack.glb
+├── iterations/
+│   ├── 001/
+│   │   ├── assembly.json
+│   │   ├── assembled.blend
+│   │   ├── render_views.json
+│   │   ├── renders/          # front, top, left, isometric
+│   │   └── critic.json
+│   ├── 002/
+│   │   └── …
+│   └── 006/
+│       └── …
+├── robot.usda                # final deliverable (after placement approval)
+├── robot_prim_map.json
+└── textures/
+```
 
-*One run folder holds source image, parts, meshes, iterations, and the final USD.*
+*One run folder holds the source image, parts IR, generated meshes, placement iterations, and the final USD.*
 
 ---
 
