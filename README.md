@@ -5,114 +5,29 @@
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](docs/pages/getting-started/requirements.mdx)
 [![Docs](https://img.shields.io/badge/docs-Nextra-000)](docs/README.md)
 
-**Dexter** turns a single product photograph into an **articulated 3D asset** — separate part meshes, a kinematic tree, and a USD package loadable in [NVIDIA Isaac Sim](https://developer.nvidia.com/isaac/sim).
+**Dexter** is an **AI agent** that generates **articulated 3D assets** for **robotic training** in simulators such as [NVIDIA Isaac Sim](https://developer.nvidia.com/isaac/sim). Give it a product photograph of an everyday object and it produces separate part meshes, a kinematic tree, joint definitions, and a USD package you can load and actuate in simulation.
 
-An OpenCode **orchestrator** agent drives the pipeline. Output lands in `.intermediate/<asset>/<NNN>/`; the final deliverable is `robot.usda`.
+An OpenCode **orchestrator** drives the pipeline. Output lands in `.intermediate/<asset>/<NNN>/`; the final deliverable is `robot.usda`.
 
 | | |
 |---|---|
 | **[Documentation](docs/README.md)** | Architecture, schemas, sample runs, developer guide |
-| **Blog** | Detailed write-up coming soon — link will be added here |
+| **[Blog](https://www.aakashvarma.com/dexter/)** | Motivation, pipeline walkthrough, and example assets |
 
 Browse the docs locally: `cd docs && npm i && npm run dev` → http://localhost:3000
 
+![OpenCode agent harness](docs/public/assets/images/dexter/opencode_agent_harness.png)
+
+*The orchestrator routes input through **analyze** and **critic** subagents; deterministic tool scripts handle mesh generation, placement, Blender assembly, and USD export.*
+
 ## Index
 
+- [Quick start](#quick-start)
+- [Sample run: dishwasher](#sample-run-dishwasher)
 - [Examples](#examples)
 - [What Dexter produces](#what-dexter-produces)
-- [Sample run: dishwasher](#sample-run-dishwasher)
-- [Quick start](#quick-start)
 - [Documentation](#documentation)
 - [Contributing](#contributing)
-
----
-
-## Examples
-
-From one reference photo each, Dexter has produced full articulated assets — per-part GLBs, an assembly layout, and USD export — for these household appliances:
-
-<table>
-  <tr>
-    <td align="center" width="50%">
-      <b>Dishwasher</b><br/>
-      <sub>Door and dish racks as separate moving parts</sub><br/><br/>
-      <img src="docs/public/assets/images/dexter/examples/dishwasher.png" width="320" alt="Dishwasher" />
-    </td>
-    <td align="center" width="50%">
-      <b>Refrigerator</b><br/>
-      <sub>French doors and freezer drawer</sub><br/><br/>
-      <img src="docs/public/assets/images/dexter/examples/refrigerator.png" width="320" alt="Refrigerator" />
-    </td>
-  </tr>
-  <tr>
-    <td align="center" width="50%">
-      <b>Washing machine</b><br/>
-      <sub>Front-load door and cabinet</sub><br/><br/>
-      <img src="docs/public/assets/images/dexter/examples/washingmachine.png" width="320" alt="Washing machine" />
-    </td>
-    <td align="center" width="50%">
-      <b>Oven</b><br/>
-      <sub>Drop-down oven door and cooktop</sub><br/><br/>
-      <img src="docs/public/assets/images/dexter/examples/oven.png" width="320" alt="Oven" />
-    </td>
-  </tr>
-</table>
-
-Bundled inputs live in [`input_images/`](input_images/). Run any of them with the [quick start](#quick-start) command below.
-
-**Sample run outputs** — download the real pipeline artifacts (GLBs, JSON IRs, `robot.usda`, etc.) to inspect or verify without running Dexter yourself: [varmology/dexter-sample-outputs on Hugging Face](https://huggingface.co/datasets/varmology/dexter-sample-outputs).
-
-Screen recording of a refrigerator run in OpenCode — source photo through placement to USD export.
-
-<p align="center">
-  <video src="docs/public/assets/video/dexter/dexter_demo.mp4" controls width="720">
-    <a href="docs/public/assets/video/dexter/dexter_demo.mp4">Download demo video</a>
-  </video>
-</p>
-
----
-
-## What Dexter produces
-
-| Deliverable | Description |
-|-------------|-------------|
-| Per-part meshes | `component_glbs/<part>.glb` — one GLB per moving part |
-| Parts IR | `parts.json` — kinematic tree and joint types |
-| Layout IR | `assembly.json` — position, orientation, and scale per part |
-| Critique IR | `critic.json` — layout score and per-part corrections |
-| USD export | `robot.usda` + `textures/` — loadable in Isaac Sim |
-
-Image-to-3D models today output a single fused mesh. Dexter breaks the object into articulated parts with joints you can actuate in simulation.
-
----
-
-## Sample run: dishwasher
-
-The [dishwasher walkthrough](docs/pages/sample-runs/dishwasher-example.mdx) follows one run end to end — from `input_images/dishwasher.png` to `.intermediate/dishwasher/001/robot.usda`. Matching artifacts are in the [sample outputs dataset](https://huggingface.co/datasets/varmology/dexter-sample-outputs).
-
-**1. Analyze** — The `analyze` subagent reads the photo and writes `parts.json` with four parts: cabinet, front door, upper rack, and lower rack.
-
-<p align="center">
-  <img src="docs/public/assets/images/dexter/run/source.png" width="400" alt="Dishwasher input photo" />
-</p>
-
-**2. Generate components** — After a human parts review, `generate_components.py` produces isolated PNGs, fal.ai GLBs, and mesh dimensions for each part.
-
-<p align="center">
-  <img src="docs/public/assets/images/dexter/part_renders.png" width="600" alt="Four generated part renders" />
-</p>
-
-**3. Placement loop** — Blender assembles the scene, renders four views, and the `critic` subagent scores the layout. Corrections feed back through `update_placement.py` until the loop stops. In the reference run, iteration 1 scored **72** (racks clipping through walls); iteration **6** scored **86** and was selected for export.
-
-<p align="center">
-  <img src="docs/public/assets/images/dexter/run/iter_001_isometric.png" width="280" alt="Iteration 1 placement" />
-  &nbsp;&nbsp;
-  <img src="docs/public/assets/images/dexter/run/iter_006_isometric.png" width="280" alt="Iteration 6 placement" />
-</p>
-
-**4. Export** — After placement approval, `blender_export_usd.py` writes `robot.usda` with packed textures.
-
-→ **[Full sample run with videos and iteration details](docs/pages/sample-runs/dishwasher-example.mdx)**
 
 ---
 
@@ -147,6 +62,107 @@ Interactive TUI: run `opencode`, press **Tab** to select the **orchestrator** ag
 
 ---
 
+## Sample run: dishwasher
+
+The [dishwasher walkthrough](docs/pages/sample-runs/dishwasher-example.mdx) follows one run end to end — from `input_images/dishwasher.png` to `.intermediate/dishwasher/001/robot.usda`. Matching artifacts are in the [sample outputs dataset](https://huggingface.co/datasets/varmology/dexter-sample-outputs).
+
+**1. Analyze** — The `analyze` subagent reads the photo and writes `parts.json` with four parts: cabinet, front door, upper rack, and lower rack.
+
+<p align="center">
+  <img src="docs/public/assets/images/dexter/run/source.png" width="400" alt="Dishwasher input photo" />
+</p>
+
+**2. Generate components** — After a human parts review, `generate_components.py` produces isolated PNGs, fal.ai GLBs, and mesh dimensions for each part.
+
+<p align="center">
+  <img src="docs/public/assets/images/dexter/part_renders.png" width="600" alt="Four generated part renders" />
+</p>
+
+**3. Placement loop** — Blender assembles the scene, renders four views, and the `critic` subagent scores the layout. Corrections feed back through `update_placement.py` until the loop stops. In the reference run, iteration 1 scored **72** (racks clipping through walls); iteration **6** scored **86** and was selected for export.
+
+<p align="center">
+  <img src="docs/public/assets/images/dexter/run/iter_001_isometric.png" width="280" alt="Iteration 1 placement" />
+  &nbsp;&nbsp;
+  <img src="docs/public/assets/images/dexter/run/iter_006_isometric.png" width="280" alt="Iteration 6 placement" />
+</p>
+
+**4. Export** — After placement approval, `blender_export_usd.py` writes `robot.usda` with packed textures. Door and racks animate on their joints in Blender before export.
+
+<p align="center">
+  <video src="docs/public/assets/video/dexter/dishwasher_blender_animation.mp4" controls width="640">
+    <a href="docs/public/assets/video/dexter/dishwasher_blender_animation.mp4">Download animation video</a>
+  </video>
+</p>
+
+→ **[Full sample run with iteration details](docs/pages/sample-runs/dishwasher-example.mdx)**
+
+---
+
+## Examples
+
+From one reference photo each, Dexter has produced full articulated assets — per-part GLBs, an assembly layout, and USD export — for these household appliances:
+
+<table>
+  <tr>
+    <td align="center" width="25%">
+      <b>Dishwasher</b><br/>
+      <sub>Door and dish racks</sub><br/><br/>
+      <div style="width:200px;height:200px;display:inline-flex;align-items:center;justify-content:center;background:#f5f5f5;border-radius:8px;">
+        <img src="docs/public/assets/images/dexter/examples/dishwasher.png" style="max-width:100%;max-height:100%;object-fit:contain;" alt="Dishwasher" />
+      </div>
+    </td>
+    <td align="center" width="25%">
+      <b>Refrigerator</b><br/>
+      <sub>French doors and freezer drawer</sub><br/><br/>
+      <div style="width:200px;height:200px;display:inline-flex;align-items:center;justify-content:center;background:#f5f5f5;border-radius:8px;">
+        <img src="docs/public/assets/images/dexter/examples/refrigerator.png" style="max-width:100%;max-height:100%;object-fit:contain;" alt="Refrigerator" />
+      </div>
+    </td>
+    <td align="center" width="25%">
+      <b>Washing machine</b><br/>
+      <sub>Front-load door and cabinet</sub><br/><br/>
+      <div style="width:200px;height:200px;display:inline-flex;align-items:center;justify-content:center;background:#f5f5f5;border-radius:8px;">
+        <img src="docs/public/assets/images/dexter/examples/washingmachine.png" style="max-width:100%;max-height:100%;object-fit:contain;" alt="Washing machine" />
+      </div>
+    </td>
+    <td align="center" width="25%">
+      <b>Oven</b><br/>
+      <sub>Drop-down door and cooktop</sub><br/><br/>
+      <div style="width:200px;height:200px;display:inline-flex;align-items:center;justify-content:center;background:#f5f5f5;border-radius:8px;">
+        <img src="docs/public/assets/images/dexter/examples/oven.png" style="max-width:100%;max-height:100%;object-fit:contain;" alt="Oven" />
+      </div>
+    </td>
+  </tr>
+</table>
+
+Bundled inputs live in [`input_images/`](input_images/). Run any of them with the [quick start](#quick-start) command above.
+
+**Sample run outputs** — download the real pipeline artifacts (GLBs, JSON IRs, `robot.usda`, etc.) to inspect or verify without running Dexter yourself: [varmology/dexter-sample-outputs on Hugging Face](https://huggingface.co/datasets/varmology/dexter-sample-outputs).
+
+Screen recording of a refrigerator run in OpenCode — source photo through placement to USD export.
+
+<p align="center">
+  <video src="docs/public/assets/video/dexter/dexter_demo.mp4" controls width="720">
+    <a href="docs/public/assets/video/dexter/dexter_demo.mp4">Download demo video</a>
+  </video>
+</p>
+
+---
+
+## What Dexter produces
+
+| Deliverable | Description |
+|-------------|-------------|
+| Per-part meshes | `component_glbs/<part>.glb` — one GLB per moving part |
+| Parts IR | `parts.json` — kinematic tree and joint types |
+| Layout IR | `assembly.json` — position, orientation, and scale per part |
+| Critique IR | `critic.json` — layout score and per-part corrections |
+| USD export | `robot.usda` + `textures/` — loadable in Isaac Sim |
+
+Image-to-3D models today output a single fused mesh. Dexter breaks the object into articulated parts with joints you can actuate in simulation.
+
+---
+
 ## Documentation
 
 | Topic | Link |
@@ -155,8 +171,9 @@ Interactive TUI: run `opencode`, press **Tab** to select the **orchestrator** ag
 | How the pipeline works | [Architecture](docs/pages/architecture/overview.mdx) · [Agentic Loop](docs/pages/architecture/agentic-loop.mdx) |
 | End-to-end example | [Dishwasher sample run](docs/pages/sample-runs/dishwasher-example.mdx) |
 | Troubleshooting | [Common failures](docs/pages/sample-runs/troubleshooting.mdx) |
+| Project write-up | [Blog](https://www.aakashvarma.com/dexter/) |
 
-For the narrative behind the project, watch for the **blog post** (link coming soon). The docs site is the source of truth for setup, schemas, and pipeline behavior.
+The docs site is the source of truth for setup, schemas, and pipeline behavior.
 
 ---
 
