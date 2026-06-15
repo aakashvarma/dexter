@@ -64,21 +64,37 @@ Interactive TUI: run `opencode`, press **Tab** to select the **orchestrator** ag
 
 ## Sample run: dishwasher
 
-The [dishwasher walkthrough](docs/pages/sample-runs/dishwasher-example.mdx) follows one run end to end — from `input_images/dishwasher.png` to `.intermediate/dishwasher/001/robot.usda`. Matching artifacts are in the [sample outputs dataset](https://huggingface.co/datasets/varmology/dexter-sample-outputs).
+The walkthrough below is an example run on a dishwasher product photo. It shows how to use Dexter — what you send in, what the agent produces at each stage, and where you are asked to review before the run continues. Full artifacts from this run (and other examples) are available in the [sample outputs dataset](https://huggingface.co/datasets/varmology/dexter-sample-outputs). See the [dishwasher walkthrough](docs/pages/sample-runs/dishwasher-example.mdx) for iteration-by-iteration detail.
 
-**1. Analyze** — The `analyze` subagent reads the photo and writes `parts.json` with four parts: cabinet, front door, upper rack, and lower rack.
+**Step 1 — Start the run.** You provide a reference photo and a prompt in OpenCode:
+
+```bash
+opencode run --agent orchestrator -- "build the dishwasher from input_images/dishwasher.png"
+```
+
+The orchestrator copies `input_images/dishwasher.png` to `.intermediate/dishwasher/001/source.png` and begins the pipeline. To pick up an existing run later:
+
+```bash
+opencode run --agent orchestrator -- "resume .intermediate/dishwasher/001/"
+```
+
+**Step 2 — Analyze.** The `analyze` subagent reads your photo and writes `parts.json` — four moving parts (cabinet, front door, upper rack, lower rack) with joint types, sizes, and poses.
 
 <p align="center">
   <img src="docs/public/assets/images/dexter/run/source.png" width="400" alt="Dishwasher input photo" />
 </p>
 
-**2. Generate components** — After a human parts review, `generate_components.py` produces isolated PNGs, fal.ai GLBs, and mesh dimensions for each part.
+**Step 3 — Parts review (you).** The orchestrator pauses and shows the part list. You confirm that names, joint types, and poses look right — or ask for edits — before any 3D generation runs.
+
+**Step 4 — Components.** After approval, `generate_components.py` produces one isolated PNG, image-to-3D GLB, and mesh dimensions per part. Output: `component_images/`, `component_glbs/`, `component_dims.json`.
 
 <p align="center">
   <img src="docs/public/assets/images/dexter/part_renders.png" width="600" alt="Four generated part renders" />
 </p>
 
-**3. Placement loop** — Blender assembles the scene, renders four views, and the `critic` subagent scores the layout. Corrections feed back through `update_placement.py` until the loop stops. In the reference run, iteration 1 scored **72** (racks clipping through walls); iteration **6** scored **86** and was selected for export.
+**Step 5 — Placement init.** `initialize_placement.py` combines the part list with mesh measurements and writes the first layout: `iterations/001/assembly.json`.
+
+**Step 6 — Placement loop.** Each round, Blender assembles the meshes (`assembled.blend`), renders four diagnostic views (`renders/`), and the `critic` subagent scores the layout against your photo (`critic.json`). Corrections feed into the next iteration via `update_placement.py`. The loop runs until the score threshold is met, a max round count is reached, or progress stalls. In this run, iteration 1 scored **72** (racks clipping through walls); iteration **6** scored **86** and was selected for export.
 
 <p align="center">
   <img src="docs/public/assets/images/dexter/run/iter_001_isometric.png" width="280" alt="Iteration 1 placement" />
@@ -86,7 +102,9 @@ The [dishwasher walkthrough](docs/pages/sample-runs/dishwasher-example.mdx) foll
   <img src="docs/public/assets/images/dexter/run/iter_006_isometric.png" width="280" alt="Iteration 6 placement" />
 </p>
 
-**4. Export** — After placement approval, `blender_export_usd.py` writes `robot.usda` with packed textures. Door and racks animate on their joints in Blender before export.
+**Step 7 — Placement review (you).** The orchestrator pauses again. You review renders from the best iteration and the assembled Blender scene, then approve the layout — or ask for another placement round — before export.
+
+**Step 8 — Export.** After approval, `blender_export_usd.py` writes the final deliverable: `robot.usda` and `textures/`, loadable in Isaac Sim. Door and racks animate on their joints in Blender before export.
 
 <p align="center">
   <video src="docs/public/assets/video/dexter/dishwasher_blender_animation.mp4" controls width="640">
